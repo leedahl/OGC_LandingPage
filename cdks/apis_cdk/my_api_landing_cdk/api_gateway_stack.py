@@ -225,6 +225,7 @@ class MyApiGatewayStack(Stack):
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             handler='ogc_landing.openapi.openapi_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
+            timeout=Duration.seconds(10),
             environment={
                 'PYTHONPATH': '/var/task'
             },
