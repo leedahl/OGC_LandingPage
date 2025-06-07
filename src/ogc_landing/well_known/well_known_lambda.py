@@ -1,3 +1,13 @@
+# Copyright (c) 2025
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import json
 from collections import namedtuple
 from json import dumps
@@ -379,19 +389,19 @@ def _prepare_well_known_html(items: List[CatalogRecord], protocol: str) -> str:
                 f'{item.relations['service-doc']['href']}" rel="service-doc">'
                 f'{item.relations['service-doc']['title']}</a></td>'
                 f'<td class="top">{'<br>'.join(item.relations['service-doc']['types'])}</td></tr>'
-                
+
                 '<tr><td class="top">Service API Specification</td>'
                 f'<td class="top"><a href="{protocol}://{item.domain}{item.anchor}'
                 f'{item.relations['service-desc']['href']}" rel="service-desc">'
                 f'{item.relations['service-desc']['title']}</a></td>'
                 f'<td class="top">{'<br>'.join(item.relations['service-desc']['types'])}</td></tr>'
-                
+
                 '<tr><td class="top">Service Conformance Metadata</td>'
                 f'<td class="top"><a href="{protocol}://{item.domain}{item.anchor}'
                 f'{item.relations['conformance']['href']}" rel="{item.relations['conformance']['rel']}">'
                 f'{item.relations['conformance']['title']}</a></td>'
                 f'<td class="top">{'<br>'.join(item.relations['conformance']['types'])}</td></tr>'
-                
+
                 '<tr><td><br></td><td><br></td><td><br></td></tr>'
                 for item in items if item.domain == domain.domain
             ])}'
