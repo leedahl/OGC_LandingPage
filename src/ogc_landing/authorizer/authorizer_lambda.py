@@ -97,11 +97,14 @@ def process_authorization(
     db_client = boto3.client('dynamodb')
     item_result = db_client.get_item(
         TableName='user_store', Key={'username': {'S': username}},
-        ConsistentRead=True, ProjectionExpression='password'
+        ConsistentRead=True, ProjectionExpression='password,salt'
     )
 
     if 'Item' in item_result:
         cipher_text = item_result['Item']['password']['B']
+
+        # Get the salt from the item result
+        salt = item_result['Item']['salt']['S'] if 'salt' in item_result['Item'] else None
 
         kms_client = boto3.client('kms')
         response = kms_client.decrypt(
@@ -115,12 +118,30 @@ def process_authorization(
 
     else:
         db_password = None
+        salt = None
+
+    # Check if the stored password contains the salt format
+    if db_password and ':' in db_password and salt:
+        # The stored password already includes the salt in format "salt:password"
+        # Compare with the provided password
+        stored_salt, stored_password = db_password.split(':', 1)
+        password_matches = stored_password == password
+
+    elif salt:
+        # Need to combine salt with provided password for comparison
+        salted_password = f"{salt}:{password}"
+        password_matches = db_password == salted_password
+
+    else:
+        # Fallback for old entries without salt
+        password_matches = db_password == password
 
     if (
             ('Item' in item_result) and
             ('password' in item_result['Item']) and
-            (db_password == password) and
-            (http_method == 'GET') and
+            password_matches and
+            (http_method == 'GET' or 
+             (http_method == 'POST' and 'user-management' in method_arn)) and
             (db_password is not None)
     ):
         result = allow_access(method_arn, username)
