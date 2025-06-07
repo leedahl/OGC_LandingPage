@@ -10,6 +10,7 @@
 
 import json
 import uuid
+import base64
 from datetime import datetime
 from typing import Dict, Any
 
@@ -46,7 +47,12 @@ def lambda_handler(event, context):
 
         # Parse the OpenAPI document from the request body
         try:
-            openapi_doc = json.loads(event['body'])
+            body = event['body']
+            # Check if the body is base64 encoded
+            if event.get('isBase64Encoded', False):
+                body = base64.b64decode(body).decode('utf_8')
+
+            openapi_doc = json.loads(body)
 
         except json.JSONDecodeError:
             return {
