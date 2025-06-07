@@ -425,8 +425,8 @@ class MyApiGatewayStack(Stack):
         # Add GET method to retrieve OpenAPI documents by API ID
         # noinspection PyTypeChecker
         openapi_api_id_resource.add_method(
-            'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            'POST',
+            api_gateway.LambdaIntegration(openapi_lambda),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
         )

@@ -35,8 +35,13 @@ def lambda_handler(event, context):
         if 'body' not in event or not event['body']:
             return {
                 'statusCode': 400,
-                'headers': {'Content-Type': 'application/json'},
-                'body': json.dumps({'error': 'Request body is required'})
+                'headers': {'Content-Type': 'application/problem+json'},
+                'body': json.dumps({
+                    'type': 'https://i7es.click/errors/missing-request-body',
+                    'title': 'Missing Request Body',
+                    'status': 400,
+                    'detail': 'Request body is required'
+                })
             }
 
         # Parse the OpenAPI document from the request body
@@ -46,16 +51,26 @@ def lambda_handler(event, context):
         except json.JSONDecodeError:
             return {
                 'statusCode': 400,
-                'headers': {'Content-Type': 'application/json'},
-                'body': json.dumps({'error': 'Invalid JSON in request body'})
+                'headers': {'Content-Type': 'application/problem+json'},
+                'body': json.dumps({
+                    'type': 'https://i7es.click/errors/invalid-json',
+                    'title': 'Invalid JSON Format',
+                    'status': 400,
+                    'detail': 'Invalid JSON in request body'
+                })
             }
 
         # Validate that it's an OpenAPI 3.0 document
         if 'openapi' not in openapi_doc or not openapi_doc['openapi'].startswith('3.'):
             return {
                 'statusCode': 400,
-                'headers': {'Content-Type': 'application/json'},
-                'body': json.dumps({'error': 'Document is not a valid OpenAPI 3.0 specification'})
+                'headers': {'Content-Type': 'application/problem+json'},
+                'body': json.dumps({
+                    'type': 'https://i7es.click/errors/invalid-openapi',
+                    'title': 'Invalid OpenAPI Document',
+                    'status': 400,
+                    'detail': 'Document is not a valid OpenAPI 3.0 specification'
+                })
             }
 
         # Generate a unique API ID if not provided
@@ -84,8 +99,13 @@ def lambda_handler(event, context):
         print(f"Error processing OpenAPI document: {str(e)}")
         return {
             'statusCode': 500,
-            'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps({'error': f'Internal server error: {str(e)}'})
+            'headers': {'Content-Type': 'application/problem+json'},
+            'body': json.dumps({
+                'type': 'https://i7es.click/errors/server-error',
+                'title': 'Internal Server Error',
+                'status': 500,
+                'detail': f'An unexpected error occurred: {str(e)}'
+            })
         }
 
 
@@ -103,7 +123,7 @@ def store_openapi_document(api_id: str, version: str, openapi_doc: Dict[str, Any
     """
     dynamodb = boto3.resource('dynamodb')
     current_time = datetime.now().isoformat()
-    
+
     result = {
         'tables_updated': [],
         'items_created': 0
@@ -112,7 +132,7 @@ def store_openapi_document(api_id: str, version: str, openapi_doc: Dict[str, Any
     # 1. Store API information in openapi_documents table
     documents_table = dynamodb.Table('openapi_documents')
     info = openapi_doc.get('info', {})
-    
+
     documents_table.put_item(
         Item={
             'api_id': api_id,
@@ -151,12 +171,12 @@ def store_openapi_document(api_id: str, version: str, openapi_doc: Dict[str, Any
     if 'paths' in openapi_doc:
         paths_table = dynamodb.Table('openapi_paths')
         operations_table = dynamodb.Table('openapi_operations')
-        
+
         for path, path_item in openapi_doc['paths'].items():
             # Extract path-level properties
             path_properties = {k: v for k, v in path_item.items() 
                               if k not in ['get', 'post', 'put', 'delete', 'options', 'head', 'patch', 'trace']}
-            
+
             # Store path information
             paths_table.put_item(
                 Item={
@@ -169,7 +189,7 @@ def store_openapi_document(api_id: str, version: str, openapi_doc: Dict[str, Any
                 }
             )
             result['items_created'] += 1
-            
+
             # Store operations for this path
             for method, operation in path_item.items():
                 if method in ['get', 'post', 'put', 'delete', 'options', 'head', 'patch', 'trace']:
@@ -190,14 +210,14 @@ def store_openapi_document(api_id: str, version: str, openapi_doc: Dict[str, Any
                         }
                     )
                     result['items_created'] += 1
-        
+
         result['tables_updated'].extend(['openapi_paths', 'openapi_operations'])
 
     # 4. Store components in openapi_components table
     if 'components' in openapi_doc:
         components_table = dynamodb.Table('openapi_components')
         components = openapi_doc['components']
-        
+
         for component_type, components_dict in components.items():
             for component_name, component_data in components_dict.items():
                 components_table.put_item(
@@ -210,7 +230,7 @@ def store_openapi_document(api_id: str, version: str, openapi_doc: Dict[str, Any
                     }
                 )
                 result['items_created'] += 1
-        
+
         result['tables_updated'].append('openapi_components')
 
     # 5. Store tags in openapi_tags table
@@ -227,19 +247,19 @@ def store_openapi_document(api_id: str, version: str, openapi_doc: Dict[str, Any
                 }
             )
             result['items_created'] += 1
-        
+
         result['tables_updated'].append('openapi_tags')
 
     # 6. Store security schemes in openapi_security_schemes table
     if 'components' in openapi_doc and 'securitySchemes' in openapi_doc['components']:
         security_table = dynamodb.Table('openapi_security_schemes')
         security_schemes = openapi_doc['components']['securitySchemes']
-        
+
         for scheme_name, scheme in security_schemes.items():
             # Extract scheme-specific details
             scheme_type = scheme.get('type', '')
             scheme_details = {k: v for k, v in scheme.items() if k not in ['type', 'description']}
-            
+
             security_table.put_item(
                 Item={
                     'api_id': api_id,
@@ -251,19 +271,19 @@ def store_openapi_document(api_id: str, version: str, openapi_doc: Dict[str, Any
                 }
             )
             result['items_created'] += 1
-        
+
         result['tables_updated'].append('openapi_security_schemes')
 
     # Update the api_catalog table to include this API
     try:
         catalog_table = dynamodb.Table('api_catalog')
-        
+
         # Check if this API already exists in the catalog
         response = catalog_table.query(
             KeyConditionExpression='api_id = :api_id',
             ExpressionAttributeValues={':api_id': api_id}
         )
-        
+
         # If not, add it to the catalog
         if not response.get('Items'):
             # Get the highest catalog_order
@@ -272,7 +292,7 @@ def store_openapi_document(api_id: str, version: str, openapi_doc: Dict[str, Any
             )
             catalog_orders = [item.get('catalog_order', 0) for item in scan_response.get('Items', [])]
             next_order = max(catalog_orders, default=0) + 1
-            
+
             # Create a new catalog entry
             catalog_table.put_item(
                 Item={
@@ -309,5 +329,5 @@ def store_openapi_document(api_id: str, version: str, openapi_doc: Dict[str, Any
     except ClientError as e:
         print(f"Error updating api_catalog: {str(e)}")
         # Continue even if catalog update fails
-    
+
     return result
