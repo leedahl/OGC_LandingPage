@@ -190,6 +190,22 @@ class MyApiGatewayStack(Stack):
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
         )
 
+        # Create DynamoDB table for API security (mapping username to api_id)
+        api_security_table = dynamodb.Table(
+            self, 'ApiSecurity',
+            table_name='api_security',
+            partition_key=dynamodb.Attribute(
+                name='username',
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name='api_id',
+                type=dynamodb.AttributeType.STRING
+            ),
+            removal_policy=RemovalPolicy.DESTROY,
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+        )
+
         # Create the well-known Lambda function
         # noinspection PyTypeChecker
         well_known_lambda = aws_lambda.Function(
@@ -254,6 +270,7 @@ class MyApiGatewayStack(Stack):
 
         # Grant the Authorizer Lambda permissions to access DynamoDB and KMS
         user_table.grant_read_data(authorizer_lambda)
+        api_security_table.grant_read_data(authorizer_lambda)
         kms_key.grant_decrypt(authorizer_lambda)
 
         # Create the register Lambda function
@@ -288,6 +305,7 @@ class MyApiGatewayStack(Stack):
 
         # Grant the User Management Lambda permission to access DynamoDB and KMS
         user_table.grant_read_write_data(user_management_lambda)
+        api_security_table.grant_read_write_data(user_management_lambda)
         kms_key.grant_encrypt_decrypt(user_management_lambda)
 
         # Create API Gateway
