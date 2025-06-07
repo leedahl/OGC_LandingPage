@@ -3,7 +3,6 @@
 *.iml
 *.iws
 *.ipr
-*.iws
 .idea_modules/
 out/
 atlassian-ide-plugin.xml
