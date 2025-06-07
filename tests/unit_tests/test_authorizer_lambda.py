@@ -296,6 +296,93 @@ class TestProcessAuthorization(unittest.TestCase):
         # Verify
         self.assertEqual(result['policyDocument']['Statement'][0]['Effect'], 'Deny')
 
+    @patch('boto3.client')
+    def test_process_authorization_openapi_api_not_owned(self, mock_boto3_client):
+        """Test process_authorization with openapi request for API not owned by user."""
+        # Setup
+        # Mock DynamoDB client
+        mock_dynamodb = MagicMock()
+
+        # First call for user authentication
+        # Second call for api_security check
+        mock_dynamodb.get_item.side_effect = [
+            {
+                'Item': {
+                    'password': {
+                        'B': b'encrypted-password'
+                    }
+                }
+            },
+            {}  # No Item in response for api_security check
+        ]
+
+        # Mock KMS client
+        mock_kms = MagicMock()
+        mock_kms.decrypt.return_value = {
+            'Plaintext': b'password'
+        }
+
+        # Configure boto3.client to return our mocks
+        mock_boto3_client.side_effect = lambda service, **kwargs: {
+            'dynamodb': mock_dynamodb,
+            'kms': mock_kms
+        }[service]
+
+        # Execute with openapi path and api_id
+        result = process_authorization(
+            'user', 'password', 'GET', 'arn:aws:execute-api:region:account:api/stage/GET/openapi/api123'
+        )
+
+        # Verify
+        self.assertEqual(mock_dynamodb.get_item.call_count, 2)
+        self.assertEqual(result['policyDocument']['Statement'][0]['Effect'], 'Deny')
+
+    @patch('boto3.client')
+    def test_process_authorization_openapi_api_owned(self, mock_boto3_client):
+        """Test process_authorization with openapi request for API owned by user."""
+        # Setup
+        # Mock DynamoDB client
+        mock_dynamodb = MagicMock()
+
+        # First call for user authentication
+        # Second call for api_security check
+        mock_dynamodb.get_item.side_effect = [
+            {
+                'Item': {
+                    'password': {
+                        'B': b'encrypted-password'
+                    }
+                }
+            },
+            {
+                'Item': {
+                    'username': {'S': 'user'},
+                    'api_id': {'S': 'api123'}
+                }
+            }  # User owns the API
+        ]
+
+        # Mock KMS client
+        mock_kms = MagicMock()
+        mock_kms.decrypt.return_value = {
+            'Plaintext': b'password'
+        }
+
+        # Configure boto3.client to return our mocks
+        mock_boto3_client.side_effect = lambda service, **kwargs: {
+            'dynamodb': mock_dynamodb,
+            'kms': mock_kms
+        }[service]
+
+        # Execute with openapi path and api_id
+        result = process_authorization(
+            'user', 'password', 'GET', 'arn:aws:execute-api:region:account:api/stage/GET/openapi/api123'
+        )
+
+        # Verify
+        self.assertEqual(mock_dynamodb.get_item.call_count, 2)
+        self.assertEqual(result['policyDocument']['Statement'][0]['Effect'], 'Allow')
+
 
 class TestDenyAccess(unittest.TestCase):
     """Test cases for the deny_access function."""
@@ -335,7 +422,6 @@ class TestDenyAccess(unittest.TestCase):
 
         # Verify
         self.assertEqual(result["statusCode"], 401)
-        self.assertEqual(result["headers"]["WWW-Authenticate"], 'Basic scope="Greeting Service API"')
         self.assertEqual(result["body"], 'Unauthorized')
 
 

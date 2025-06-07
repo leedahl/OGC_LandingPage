@@ -139,6 +139,36 @@ def process_authorization(
         # Fallback for old entries without salt
         password_matches = db_password == password
 
+    # Check if this is an openapi request with an api_id
+    method_arn_parts = method_arn.split(':')
+    api_parts = method_arn_parts[5].split('/')
+
+    # Check if this is an openapi request with an api_id
+    is_openapi_request = len(api_parts) >= 5 and api_parts[3] == 'openapi' and len(api_parts) > 4
+
+    # If this is an openapi request with an api_id, check if the user owns the API
+    if (is_openapi_request and 
+        ('Item' in item_result) and 
+        ('password' in item_result['Item']) and 
+        password_matches and 
+        (db_password is not None)):
+
+        api_id = api_parts[4]
+
+        # Check if the user owns this API ID
+        api_security_result = db_client.get_item(
+            TableName='api_security',
+            Key={
+                'username': {'S': username},
+                'api_id': {'S': api_id}
+            },
+            ConsistentRead=True
+        )
+
+        if 'Item' not in api_security_result:
+            # User doesn't own this API ID
+            return deny_access(_AuthenticationStatus.FORBIDDEN, method_arn, username)
+
     if (
             ('Item' in item_result) and
             ('password' in item_result['Item']) and
