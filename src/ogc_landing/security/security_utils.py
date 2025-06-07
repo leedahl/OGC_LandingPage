@@ -9,6 +9,7 @@
 # SOFTWARE.
 import boto3
 import uuid
+import os
 
 
 def user_exists(username):
@@ -48,10 +49,12 @@ def encrypt_password(password):
     # Combine salt and password for encryption
     salted_password = f"{salt}:{password}"
 
+    key_alias = os.environ.get('key_alias', 'hello_world')
+
     kms_client = boto3.client('kms')
     response = kms_client.encrypt(
         Plaintext=salted_password.encode('utf_8'),
-        KeyId='alias/hello_world'
+        KeyId=f'alias/{key_alias}'
     )
 
     db_password = response['CiphertextBlob']

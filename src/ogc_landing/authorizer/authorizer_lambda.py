@@ -11,6 +11,7 @@ import base64
 import binascii
 import re
 import boto3
+import os
 from enum import Enum
 from typing import Optional
 
@@ -106,10 +107,12 @@ def process_authorization(
         # Get the salt from the item result
         salt = item_result['Item']['salt']['S'] if 'salt' in item_result['Item'] else None
 
+        key_alias = os.environ.get('key_alias', 'hello_world')
+
         kms_client = boto3.client('kms')
         response = kms_client.decrypt(
             CiphertextBlob=cipher_text,
-            KeyId='alias/hello_world'
+            KeyId=f'alias/{key_alias}'
         )
 
         db_password = response['Plaintext'].decode('utf_8')
