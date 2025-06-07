@@ -8,6 +8,44 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import boto3
+import unicodedata
+from ogc_landing.security import user_exists, create_user
+
+
+def validate_username(username):
+    """
+    Validates that the username only uses UTF-8 character set and limits characters
+    to alphabetical and numerical with consideration for other languages besides English.
+
+    Args:
+        username (str): The username to validate
+
+    Returns:
+        bool: True if the username is valid, False otherwise
+    """
+    # Check if the username is empty
+    if not username:
+        return False
+
+    try:
+        # Ensure the username is valid UTF-8
+        username.encode('utf-8').decode('utf-8')
+
+        # Check if the username contains only letters, numbers, periods, underscores, and dashes
+        for char in username:
+            category = unicodedata.category(char)
+            # L* categories are letters, N* categories are numbers
+            # Also allow periods, underscores, and dashes
+            if not (category.startswith('L') or category.startswith('N') or char in ['.', '_', '-']):
+                return False
+
+        return True
+
+    except UnicodeError:
+        # If there's an encoding/decoding error, the username is not valid UTF-8
+        return False
+
+
 
 
 # noinspection PyUnusedLocal
@@ -20,17 +58,52 @@ def lambda_handler(event, context):
         username = values[0].split('=')[1]
         password = values[1].split('=')[1]
 
-        kms_client = boto3.client('kms')
-        response = kms_client.encrypt(
-            Plaintext=password.encode('utf_8'),
-            KeyId='alias/hello_world'
-        )
+        # Validate username
+        if not validate_username(username):
+            body = (
+                '<!DOCTYPE HTML>'
+                '<html>'
+                '<head>'
+                "<title>Michael's Wonderful API Registration</title>"
+                '</head>'
+                '<body>'
+                "<h1>Registration Failed</h1>"
+                '<p>Invalid username. Username must contain only alphabetical and numerical characters, periods (.), underscores (_), and dashes (-).</p>'
+                '<p><a href="/register">Try Again</a></p>'
+                '</body>'
+                '</html>'
+            )
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'text/html; charset=utf-8'},
+                'body': body,
+                'isBase64Encoded': False
+            }
 
-        db_password = response['CiphertextBlob']
+        # Check if user already exists
+        if user_exists(username):
+            body = (
+                '<!DOCTYPE HTML>'
+                '<html>'
+                '<head>'
+                "<title>Michael's Wonderful API Registration</title>"
+                '</head>'
+                '<body>'
+                "<h1>Registration Failed</h1>"
+                '<p>A user with this username already exists. Please choose a different username.</p>'
+                '<p><a href="/register">Try Again</a></p>'
+                '</body>'
+                '</html>'
+            )
+            return {
+                'statusCode': 409,  # Conflict
+                'headers': {'Content-Type': 'text/html; charset=utf-8'},
+                'body': body,
+                'isBase64Encoded': False
+            }
 
-        dynamodb_client = boto3.resource('dynamodb')
-        table = dynamodb_client.Table('user_store')
-        table.put_item(Item={'username': username, 'password': db_password})
+        # Create the user with the given username and password
+        create_user(username, password)
 
         body = (
             '<!DOCTYPE HTML>'

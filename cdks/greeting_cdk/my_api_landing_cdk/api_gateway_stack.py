@@ -51,8 +51,11 @@ class MyApiGatewayStack(Stack):
         authorizer_lambda = aws_lambda.Function(
             self, 'AuthorizerLambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
-            handler='authorizer_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/ogc_landing/authorizer'),
+            handler='ogc_landing.authorizer.authorizer_lambda.lambda_handler',
+            code=aws_lambda.Code.from_asset('../../src'),
+            environment={
+                'PYTHONPATH': '/var/task'
+            },
         )
 
         # Grant the Authorizer Lambda permissions to access DynamoDB and KMS
@@ -64,8 +67,11 @@ class MyApiGatewayStack(Stack):
         greeting_lambda = aws_lambda.Function(
             self, 'GreetingLambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
-            handler='greeting_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/ogc_landing/greeting'),
+            handler='ogc_landing.greeting.greeting_lambda.lambda_handler',
+            code=aws_lambda.Code.from_asset('../../src'),
+            environment={
+                'PYTHONPATH': '/var/task'
+            },
         )
 
         # Create the register Lambda function
@@ -73,13 +79,32 @@ class MyApiGatewayStack(Stack):
         register_lambda = aws_lambda.Function(
             self, 'RegisterLambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
-            handler='register_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/ogc_landing/registration'),
+            handler='ogc_landing.registration.register_lambda.lambda_handler',
+            code=aws_lambda.Code.from_asset('../../src'),
+            environment={
+                'PYTHONPATH': '/var/task'
+            },
+        )
+
+        # Create the user management Lambda function
+        # noinspection PyTypeChecker
+        user_management_lambda = aws_lambda.Function(
+            self, 'UserManagementLambda',
+            runtime=aws_lambda.Runtime.PYTHON_3_12,
+            handler='ogc_landing.user_management.user_management_lambda.lambda_handler',
+            code=aws_lambda.Code.from_asset('../../src'),
+            environment={
+                'PYTHONPATH': '/var/task'
+            },
         )
 
         # Grant the Register Lambda permission to access DynamoDB
         user_table.grant_write_data(register_lambda)
         kms_key.grant_encrypt(register_lambda)
+
+        # Grant the User Management Lambda permission to access DynamoDB and KMS
+        user_table.grant_read_write_data(user_management_lambda)
+        kms_key.grant_encrypt_decrypt(user_management_lambda)
 
         # Create API Gateway
         api = api_gateway.RestApi(
@@ -111,6 +136,7 @@ class MyApiGatewayStack(Stack):
         register_resource = api.root.add_resource('register')
         greeting_resource = api.root.add_resource('retrieve')
         name_resource = greeting_resource.add_resource('{name}')
+        user_management_resource = api.root.add_resource('user-management')
 
         # Add GET method with authorizer to the greeting endpoint
         # noinspection PyTypeChecker
@@ -142,6 +168,24 @@ class MyApiGatewayStack(Stack):
         greeting_resource.add_method(
             'GET',
             api_gateway.LambdaIntegration(greeting_lambda),
+            authorizer=authorizer,
+            authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add GET method to user management endpoint
+        # noinspection PyTypeChecker
+        user_management_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(user_management_lambda),
+            authorizer=authorizer,
+            authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add POST method to user management endpoint
+        # noinspection PyTypeChecker
+        user_management_resource.add_method(
+            'POST',
+            api_gateway.LambdaIntegration(user_management_lambda),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
         )
