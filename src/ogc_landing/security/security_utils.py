@@ -40,7 +40,7 @@ def encrypt_password(password):
         password (str): The password to encrypt
 
     Returns:
-        tuple: (encrypted_password, salt) where encrypted_password is the encrypted password
+        tuple: (encrypted_password, salt) where encrypted_password is the encrypted password,
                and salt is the salt used for encryption
     """
     # Generate a UUID to use as salt
