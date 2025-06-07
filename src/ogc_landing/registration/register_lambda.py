@@ -11,42 +11,6 @@ import unicodedata
 from ogc_landing.security import user_exists, create_user
 
 
-def validate_username(username):
-    """
-    Validates that the username only uses UTF-8 character set and limits characters
-    to alphabetical and numerical with consideration for other languages besides English.
-
-    Args:
-        username (str): The username to validate
-
-    Returns:
-        bool: True if the username is valid, False otherwise
-    """
-    # Check if the username is empty
-    if not username:
-        return False
-
-    try:
-        # Ensure the username is valid UTF-8
-        username.encode('utf-8').decode('utf-8')
-
-        # Check if the username contains only letters, numbers, periods, underscores, and dashes
-        for char in username:
-            category = unicodedata.category(char)
-            # L* categories are letters, N* categories are numbers
-            # Also allow periods, underscores, and dashes
-            if not (category.startswith('L') or category.startswith('N') or char in ['.', '_', '-']):
-                return False
-
-        return True
-
-    except UnicodeError:
-        # If there's an encoding/decoding error, the username is not valid UTF-8
-        return False
-
-
-
-
 # noinspection PyUnusedLocal
 def lambda_handler(event, context):
 
@@ -58,7 +22,7 @@ def lambda_handler(event, context):
         password = values[1].split('=')[1]
 
         # Validate username
-        if not validate_username(username):
+        if not _validate_username(username):
             body = (
                 '<!DOCTYPE HTML>'
                 '<html>'
@@ -144,3 +108,37 @@ def lambda_handler(event, context):
         'body': body,
         'isBase64Encoded': False
     }
+
+
+def _validate_username(username):
+    """
+    Validates that the username only uses UTF-8 character set and limits characters
+    to alphabetical and numerical with consideration for other languages besides English.
+
+    Args:
+        username (str): The username to validate
+
+    Returns:
+        bool: True if the username is valid, False otherwise
+    """
+    # Check if the username is empty
+    if not username:
+        return False
+
+    try:
+        # Ensure the username is valid UTF-8
+        username.encode('utf-8').decode('utf-8')
+
+        # Check if the username contains only letters, numbers, periods, underscores, and dashes
+        for char in username:
+            category = unicodedata.category(char)
+            # L* categories are letters, N* categories are numbers
+            # Also allow periods, underscores, and dashes
+            if not (category.startswith('L') or category.startswith('N') or char in ['.', '_', '-']):
+                return False
+
+        return True
+
+    except UnicodeError:
+        # If there's an encoding/decoding error, the username is not valid UTF-8
+        return False
