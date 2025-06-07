@@ -417,7 +417,10 @@ class MyApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         openapi_resource.add_method(
             'POST',
-            api_gateway.LambdaIntegration(openapi_lambda),
+            api_gateway.LambdaIntegration(
+                openapi_lambda,
+                timeout=Duration.seconds(10)  # Set timeout to 10 seconds
+            ),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
         )
@@ -426,7 +429,10 @@ class MyApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         openapi_api_id_resource.add_method(
             'POST',
-            api_gateway.LambdaIntegration(openapi_lambda),
+            api_gateway.LambdaIntegration(
+                openapi_lambda,
+                timeout=Duration.seconds(10)  # Set timeout to 10 seconds
+            ),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
         )
