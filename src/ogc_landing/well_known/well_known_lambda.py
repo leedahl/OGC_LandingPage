@@ -349,15 +349,166 @@ def _generate_openapi_html(openapi_doc: Dict[str, Any]) -> str:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title} - OpenAPI Documentation</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@3/swagger-ui.css">
     <style>
+        /* Basic reset */
         body {{
             margin: 0;
             padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #3b4151;
         }}
+
+        /* Swagger UI container */
         #swagger-ui {{
             max-width: 1200px;
             margin: 0 auto;
+            padding: 20px;
+        }}
+
+        /* Header styling */
+        .swagger-ui .topbar {{
+            background-color: #1b1b1b;
+            padding: 10px 0;
+        }}
+
+        .swagger-ui .info {{
+            margin: 20px 0;
+        }}
+
+        .swagger-ui .info .title {{
+            font-size: 36px;
+            margin: 0;
+            font-weight: bold;
+        }}
+
+        .swagger-ui .info .description {{
+            font-size: 14px;
+            margin: 10px 0;
+        }}
+
+        /* Operation blocks */
+        .swagger-ui .opblock {{
+            margin: 0 0 15px;
+            border-radius: 4px;
+            box-shadow: 0 0 3px rgba(0,0,0,.19);
+        }}
+
+        .swagger-ui .opblock .opblock-summary {{
+            padding: 5px;
+            cursor: pointer;
+        }}
+
+        .swagger-ui .opblock .opblock-summary-method {{
+            font-size: 14px;
+            font-weight: 700;
+            min-width: 80px;
+            padding: 6px 15px;
+            text-align: center;
+            border-radius: 3px;
+            text-shadow: 0 1px 0 rgba(0,0,0,.1);
+            font-family: sans-serif;
+            color: #fff;
+        }}
+
+        /* HTTP methods colors */
+        .swagger-ui .opblock-get .opblock-summary-method {{
+            background: #61affe;
+        }}
+
+        .swagger-ui .opblock-post .opblock-summary-method {{
+            background: #49cc90;
+        }}
+
+        .swagger-ui .opblock-put .opblock-summary-method {{
+            background: #fca130;
+        }}
+
+        .swagger-ui .opblock-delete .opblock-summary-method {{
+            background: #f93e3e;
+        }}
+
+        .swagger-ui .opblock-patch .opblock-summary-method {{
+            background: #50e3c2;
+        }}
+
+        /* Models */
+        .swagger-ui .model {{
+            font-size: 12px;
+            font-weight: 300;
+            font-family: monospace;
+        }}
+
+        .swagger-ui .model-title {{
+            font-size: 16px;
+            font-family: sans-serif;
+            margin: 10px 0;
+        }}
+
+        /* Tables */
+        .swagger-ui table {{
+            width: 100%;
+            border-collapse: collapse;
+        }}
+
+        .swagger-ui table thead tr th {{
+            font-size: 12px;
+            font-weight: 700;
+            padding: 12px 0;
+            text-align: left;
+            border-bottom: 1px solid rgba(59,65,81,.2);
+        }}
+
+        .swagger-ui table tbody tr td {{
+            padding: 10px 0;
+            vertical-align: top;
+        }}
+
+        /* Buttons */
+        .swagger-ui .btn {{
+            font-size: 14px;
+            font-weight: 700;
+            padding: 5px 23px;
+            transition: all .3s;
+            border: 2px solid #888;
+            border-radius: 4px;
+            background: transparent;
+            box-shadow: 0 1px 2px rgba(0,0,0,.1);
+            cursor: pointer;
+        }}
+
+        .swagger-ui .btn.execute {{
+            background-color: #4990e2;
+            color: #fff;
+            border-color: #4990e2;
+        }}
+
+        /* Schema */
+        .swagger-ui .property-name {{
+            font-size: 14px;
+            font-family: monospace;
+            font-weight: 600;
+        }}
+
+        .swagger-ui .property-type {{
+            color: #6b6b6b;
+        }}
+
+        /* Responses */
+        .swagger-ui .responses-inner {{
+            padding: 20px;
+        }}
+
+        .swagger-ui .response-col_status {{
+            font-size: 14px;
+            font-family: sans-serif;
+        }}
+
+        /* Code blocks */
+        .swagger-ui .microlight {{
+            font-size: 12px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }}
     </style>
 </head>
