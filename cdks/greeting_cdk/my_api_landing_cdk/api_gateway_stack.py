@@ -54,7 +54,8 @@ class MyApiGatewayStack(Stack):
             handler='ogc_landing.authorizer.authorizer_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
             environment={
-                'PYTHONPATH': '/var/task'
+                'PYTHONPATH': '/var/task',
+                'key_alias': 'hello_world'
             },
         )
 
@@ -82,7 +83,8 @@ class MyApiGatewayStack(Stack):
             handler='ogc_landing.registration.register_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
             environment={
-                'PYTHONPATH': '/var/task'
+                'PYTHONPATH': '/var/task',
+                'key_alias': 'hello_world'
             },
         )
 
@@ -94,12 +96,13 @@ class MyApiGatewayStack(Stack):
             handler='ogc_landing.user_management.user_management_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
             environment={
-                'PYTHONPATH': '/var/task'
+                'PYTHONPATH': '/var/task',
+                'key_alias': 'hello_world'
             },
         )
 
         # Grant the Register Lambda permission to access DynamoDB
-        user_table.grant_write_data(register_lambda)
+        user_table.grant_read_write_data(register_lambda)
         kms_key.grant_encrypt(register_lambda)
 
         # Grant the User Management Lambda permission to access DynamoDB and KMS

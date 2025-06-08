@@ -323,7 +323,7 @@ class MyApiGatewayStack(Stack):
             'Unauthorized',
             type=ResponseType.UNAUTHORIZED,
             response_headers={
-                'WWW-Authenticate': "'Basic realm=\"Personalized Greeting API\"'"
+                'WWW-Authenticate': "'Basic realm=\"Portfolio Management API\"'"
             }
         )
 
