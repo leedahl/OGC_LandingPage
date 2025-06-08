@@ -224,8 +224,7 @@ class MyApiGatewayStack(Stack):
             self, 'ProxyLambdaInvokeAccess',
             action='lambda:InvokeFunction',
             function_name=well_known_lambda.function_arn,
-            principal='lambda.amazonaws.com',
-            source_arn='arn:aws:sts::911737211406:assumed-role/WellKnownProxyLambdaRole/WellKnownProxyLambda'
+            principal='arn:aws:iam::911737211406:role/WellKnownProxyLambdaRole'
         )
 
         # Create the OpenAPI Lambda function
