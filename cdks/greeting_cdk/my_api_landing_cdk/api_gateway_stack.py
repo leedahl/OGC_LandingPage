@@ -92,6 +92,25 @@ class MyApiGatewayStack(Stack):
             },
         )
 
+        # Create a role with a fixed name for the well-known proxy Lambda function
+        well_known_proxy_role = iam.Role(
+            self, 'WellKnownProxyRole',
+            role_name='WellKnownProxyLambdaRole',  # Fixed name without stack prefix or random suffix
+            assumed_by=iam.ServicePrincipal('lambda.amazonaws.com'),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole')
+            ]
+        )
+
+        # Grant the well-known proxy Lambda permission to invoke the well-known Lambda in the other account
+        well_known_proxy_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=['lambda:InvokeFunction'],
+                resources=[f'arn:aws:lambda:us-east-2:047988295961:function:WellKnownLambda'],
+                effect=iam.Effect.ALLOW
+            )
+        )
+
         # Create the well-known proxy Lambda function
         # noinspection PyTypeChecker
         well_known_proxy_lambda = aws_lambda.Function(
@@ -100,21 +119,13 @@ class MyApiGatewayStack(Stack):
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             handler='ogc_landing.well_known.well_known_proxy_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
+            role=well_known_proxy_role,  # Use the fixed role
             environment={
                 'PYTHONPATH': '/var/task',
                 'TARGET_ACCOUNT_ID': '047988295961',
                 'TARGET_FUNCTION_NAME': 'WellKnownLambda',
                 'TARGET_REGION': 'us-east-2'
-            },
-        )
-
-        # Grant the well-known proxy Lambda permission to invoke the well-known Lambda in the other account
-        well_known_proxy_lambda.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:us-east-2:047988295961:function:WellKnownLambda'],
-                effect=iam.Effect.ALLOW
-            )
+            }
         )
 
         # Create the user management Lambda function
