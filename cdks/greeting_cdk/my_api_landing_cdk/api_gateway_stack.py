@@ -88,6 +88,21 @@ class MyApiGatewayStack(Stack):
             },
         )
 
+        # Create the well-known proxy Lambda function
+        # noinspection PyTypeChecker
+        well_known_proxy_lambda = aws_lambda.Function(
+            self, 'WellKnownProxyLambda',
+            runtime=aws_lambda.Runtime.PYTHON_3_12,
+            handler='ogc_landing.well_known_proxy.well_known_lambda.lambda_handler',
+            code=aws_lambda.Code.from_asset('../../src'),
+            environment={
+                'PYTHONPATH': '/var/task',
+                'TARGET_ACCOUNT_ID': '047988295961',
+                'TARGET_FUNCTION_NAME': 'well_known_lambda',
+                'TARGET_REGION': 'us-east-2'
+            },
+        )
+
         # Create the user management Lambda function
         # noinspection PyTypeChecker
         user_management_lambda = aws_lambda.Function(
@@ -197,6 +212,54 @@ class MyApiGatewayStack(Stack):
             api_gateway.LambdaIntegration(user_management_lambda),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        well_known_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
+        )
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        well_known_name_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
+        )
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        api_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
+        )
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        documentation_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
+        )
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        conformance_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
+        )
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        conformance_name_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
         )
 
         # Look up the hosted zone name
