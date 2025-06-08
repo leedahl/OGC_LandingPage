@@ -213,6 +213,7 @@ class MyApiGatewayStack(Stack):
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             handler='ogc_landing.well_known.well_known_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
+            timeout=Duration.seconds(10),
             environment={
                 'PYTHONPATH': '/var/task'
             },
@@ -410,7 +411,10 @@ class MyApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         index_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(
+                well_known_lambda,
+                timeout = Duration.seconds(10)  # Set timeout to 10 seconds
+            ),
             authorization_type=api_gateway.AuthorizationType.NONE,
         )
 
