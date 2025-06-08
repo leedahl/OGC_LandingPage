@@ -221,12 +221,12 @@ class MyApiGatewayStack(Stack):
             },
         )
 
-        # Add permission for cross-account access from an account that the Greeting API resides in.
-        well_known_lambda.add_permission(
-            'AllowCrossAccountInvocation',
-            principal=iam.ServicePrincipal('lambda.amazonaws.com'),
-            action='lambda:InvokeFunction',
-            source_account='911737211406',  # greeting_cdk account ID
+        aws_lambda.CfnPermission(
+            self, 'ProxyLambdaInvokeAccess',
+            action='lambda:invoke',
+            function_name=well_known_lambda.function_arn,
+            principal='lambda.amazonaws.com',
+            source_arn='arn:aws:lambda:us-east-2:911737211406:function:WellKnownProxyLambda'
         )
 
         # Create the OpenAPI Lambda function
