@@ -211,6 +211,7 @@ class MyApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         well_known_lambda = aws_lambda.Function(
             self, 'WellKnownLambda',
+            function_name='WellKnownLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             handler='ogc_landing.well_known.well_known_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
@@ -232,6 +233,7 @@ class MyApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         openapi_lambda = aws_lambda.Function(
             self, 'OpenApiLambda',
+            function_name='OpenApiLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             handler='ogc_landing.openapi.openapi_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
@@ -270,6 +272,7 @@ class MyApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         authorizer_lambda = aws_lambda.Function(
             self, 'AuthorizerLambda',
+            function_name='AuthorizerLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             handler='ogc_landing.authorizer.authorizer_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
@@ -288,6 +291,7 @@ class MyApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         register_lambda = aws_lambda.Function(
             self, 'RegisterLambda',
+            function_name='RegisterLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             handler='ogc_landing.registration.register_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
@@ -301,6 +305,7 @@ class MyApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         user_management_lambda = aws_lambda.Function(
             self, 'UserManagementLambda',
+            function_name='UserManagementLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             handler='ogc_landing.user_management.user_management_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
