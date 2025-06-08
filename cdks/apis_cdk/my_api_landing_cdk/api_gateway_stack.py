@@ -16,8 +16,7 @@ from aws_cdk import (
     aws_route53 as route53,
     aws_route53_targets as targets,
     Duration,
-    RemovalPolicy,
-    aws_iam as iam
+    RemovalPolicy
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
@@ -226,7 +225,7 @@ class MyApiGatewayStack(Stack):
             action='lambda:InvokeFunction',
             function_name=well_known_lambda.function_arn,
             principal='lambda.amazonaws.com',
-            source_arn='arn:aws:lambda:us-east-2:911737211406:function:WellKnownProxyLambda'
+            source_arn='arn:aws:sts::911737211406:assumed-role/WellKnownProxyLambdaRole/WellKnownProxyLambda'
         )
 
         # Create the OpenAPI Lambda function
