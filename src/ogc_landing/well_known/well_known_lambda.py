@@ -89,7 +89,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         case '/api':
             body, content_type, link_header, location_header, status_code = _process_api_request(host, items)
 
-        case 'documentation':
+        case '/documentation':
             body, content_type, link_header, location_header, status_code = _process_documentation_request(host, items)
 
         case '/':
