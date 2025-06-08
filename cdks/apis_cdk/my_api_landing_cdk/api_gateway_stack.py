@@ -223,7 +223,7 @@ class MyApiGatewayStack(Stack):
 
         aws_lambda.CfnPermission(
             self, 'ProxyLambdaInvokeAccess',
-            action='lambda:invoke',
+            action='lambda:InvokeFunction',
             function_name=well_known_lambda.function_arn,
             principal='lambda.amazonaws.com',
             source_arn='arn:aws:lambda:us-east-2:911737211406:function:WellKnownProxyLambda'
