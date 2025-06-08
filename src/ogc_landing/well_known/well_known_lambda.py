@@ -10,9 +10,10 @@
 
 import json
 from collections import namedtuple
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any, Optional
+from boto3.dynamodb import conditions
+from boto3 import resource
 
-import boto3
 from botocore.exceptions import BotoCoreError
 
 CatalogRecord = namedtuple('CatalogRecord', [
@@ -53,7 +54,7 @@ def lambda_handler(event, context):
         else 'https'
     )
 
-    dynamodb_client = boto3.resource('dynamodb')
+    dynamodb_client = resource('dynamodb')
     api_methods_table = dynamodb_client.Table('api_catalog')
     api_catalog = api_methods_table.scan(
         Select='ALL_ATTRIBUTES',
@@ -86,14 +87,10 @@ def lambda_handler(event, context):
             )
 
         case '/api':
-            body, content_type, link_header, location_header, status_code = _process_api_request(
-                accept, event, host, items
-            )
+            body, content_type, link_header, location_header, status_code = _process_api_request(host, items)
 
         case 'documentation':
-            body, content_type, link_header, location_header, status_code = _process_documentation_request(
-                accept, event, host, items
-            )
+            body, content_type, link_header, location_header, status_code = _process_documentation_request(host, items)
 
         case '/':
             body, content_type, link_header, location_header, status_code = _process_landing_page_request(
@@ -120,6 +117,281 @@ def lambda_handler(event, context):
     }
 
 
+def _generate_openapi_document(api_id: str, version: str) -> Dict[str, Any]:
+    """
+    Dynamically generate an OpenAPI 3.0 document from DynamoDB tables.
+
+    Args:
+        api_id (str): The API identifier
+        version (str): The API version
+
+    Returns:
+        dict: The complete OpenAPI document
+    """
+    dynamodb_resource = resource('dynamodb')
+
+    # Initialize the OpenAPI document
+    openapi_doc:  dict[str, str | dict | dict[str, dict] | list] = {
+        "openapi": "3.0.0",
+        "paths": {},
+        "components": {
+            "schemas": {},
+            "parameters": {},
+            "responses": {},
+            "securitySchemes": {}
+        }
+    }
+
+    # 1. Get API information
+    documents_table = dynamodb_resource.Table('openapi_documents')
+    document_response = documents_table.get_item(
+        Key={
+            'api_id': api_id,
+            'version': version
+        }
+    )
+
+    if 'Item' not in document_response:
+        # If the version is 'latest', try to find the latest version
+        if version == 'latest':
+            documents_response = documents_table.query(
+                KeyConditionExpression=conditions.Key('api_id').eq(api_id)
+            )
+            if documents_response.get('Items'):
+                # Sort by version and get the latest
+                items = sorted(documents_response['Items'], key=lambda x: x['version'], reverse=True)
+                document = items[0]
+                version = document['version']
+            else:
+                raise ValueError(f"API with id {api_id} not found")
+        else:
+            raise ValueError(f"API with id {api_id} and version {version} not found")
+    else:
+        document = document_response['Item']
+
+    # Add an info section
+    openapi_doc["info"] = {
+        "title": document.get('title', ''),
+        "description": document.get('description', ''),
+        "version": version,
+        "termsOfService": document.get('terms_of_service', ''),
+        "contact": document.get('contact', dict()),
+        "license": document.get('license', dict())
+    }
+
+    # Add external docs if available
+    if 'external_docs' in document:
+        openapi_doc["externalDocs"] = document['external_docs']
+
+    # 2. Get servers
+    servers_table = dynamodb_resource.Table('openapi_servers')
+    servers_response = servers_table.query(
+        KeyConditionExpression=conditions.Key('api_id').eq(api_id)
+    )
+
+    if servers_response.get('Items'):
+        openapi_doc["servers"] = list()
+        for server in servers_response['Items']:
+            if server.get('version') == version:
+                server_obj = {
+                    "url": server.get('url', ''),
+                    "description": server.get('description', '')
+                }
+                if 'variables' in server:
+                    server_obj["variables"] = server['variables']
+                openapi_doc["servers"].append(server_obj)
+
+    # 3. Get paths and operations
+    paths_table = dynamodb_resource.Table('openapi_paths')
+    paths_response = paths_table.query(
+        KeyConditionExpression=conditions.Key('api_id').eq(api_id)
+    )
+
+    operations_table = dynamodb_resource.Table('openapi_operations')
+
+    for path_item in paths_response.get('Items', []):
+        if path_item.get('version') != version:
+            continue
+
+        path = path_item['path']
+        path_obj = {
+            "summary": path_item.get('summary', ''),
+            "description": path_item.get('description', '')
+        }
+
+        # Add path parameters if available
+        if 'parameters' in path_item:
+            path_obj["parameters"] = path_item['parameters']
+
+        # Get operations for this path
+        operations_response = operations_table.query(
+            KeyConditionExpression=conditions.Key('api_id#path').eq(f"{api_id}#{path}")
+        )
+
+        for operation in operations_response.get('Items', []):
+            if operation.get('version') != version:
+                continue
+
+            method = operation['method'].lower()
+            operation_obj = {
+                "operationId": operation.get('operation_id', ''),
+                "summary": operation.get('summary', ''),
+                "description": operation.get('description', '')
+            }
+
+            # Add tags if available
+            if 'tags' in operation:
+                operation_obj["tags"] = operation['tags']
+
+            # Add parameters if available
+            if 'parameters' in operation:
+                operation_obj["parameters"] = operation['parameters']
+
+            # Add requestBody if available
+            if 'request_body' in operation:
+                operation_obj["requestBody"] = operation['request_body']
+
+            # Add responses if available
+            if 'responses' in operation:
+                operation_obj["responses"] = operation['responses']
+
+            # Add security if available
+            if 'security' in operation:
+                operation_obj["security"] = operation['security']
+
+            # Add the deprecated flag if available
+            if 'deprecated' in operation:
+                operation_obj["deprecated"] = operation['deprecated']
+
+            path_obj[method] = operation_obj
+
+        openapi_doc["paths"][path] = path_obj
+
+    # 4. Get components
+    components_table = dynamodb_resource.Table('openapi_components')
+    components_response = components_table.query(
+        KeyConditionExpression=conditions.Key('api_id').eq(api_id)
+    )
+
+    for component in components_response.get('Items', []):
+        if component.get('version') != version:
+            continue
+
+        component_key = component['component_type#component_name']
+        component_type, component_name = component_key.split('#', 1)
+
+        # Initialize component type if not exists
+        if component_type not in openapi_doc["components"]:
+            openapi_doc["components"][component_type] = {}
+
+        openapi_doc["components"][component_type][component_name] = component['component_data']
+
+    # 5. Get tags
+    tags_table = dynamodb_resource.Table('openapi_tags')
+    tags_response = tags_table.query(
+        KeyConditionExpression=conditions.Key('api_id').eq(api_id)
+    )
+
+    if tags_response.get('Items'):
+        openapi_doc["tags"] = []
+        for tag in tags_response['Items']:
+            if tag.get('version') == version:
+                tag_obj = {
+                    "name": tag['tag_name'],
+                    "description": tag.get('description', '')
+                }
+                if 'external_docs' in tag:
+                    tag_obj["externalDocs"] = tag['external_docs']
+                openapi_doc["tags"].append(tag_obj)
+
+    # 6. Get security schemes
+    security_table = dynamodb_resource.Table('openapi_security_schemes')
+    security_response = security_table.query(
+        KeyConditionExpression=conditions.Key('api_id').eq(api_id)
+    )
+
+    for scheme in security_response.get('Items', []):
+        if scheme.get('version') != version:
+            continue
+
+        scheme_name = scheme['scheme_name']
+        scheme_obj = {
+            "type": scheme.get('type', ''),
+            "description": scheme.get('description', '')
+        }
+
+        # Add scheme-specific details
+        if 'scheme_details' in scheme:
+            for key, value in scheme['scheme_details'].items():
+                scheme_obj[key] = value
+
+        openapi_doc["components"]["securitySchemes"][scheme_name] = scheme_obj
+
+    return openapi_doc
+
+
+def _generate_openapi_html(openapi_doc: Dict[str, Any]) -> str:
+    """
+    Generate an HTML representation of an OpenAPI document.
+
+    Args:
+        openapi_doc (dict): The OpenAPI document
+
+    Returns:
+        str: HTML representation of the OpenAPI document
+    """
+    title = openapi_doc.get('info', {}).get('title', 'API Documentation')
+
+    # Create a basic HTML template with Swagger UI
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title} - OpenAPI Documentation</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@3/swagger-ui.css">
+    <style>
+        body {{
+            margin: 0;
+            padding: 0;
+        }}
+        #swagger-ui {{
+            max-width: 1200px;
+            margin: 0 auto;
+        }}
+    </style>
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@3/swagger-ui-bundle.js"></script>
+    <script>
+        window.onload = function() {{
+            const ui = SwaggerUIBundle({{
+                spec: {json.dumps(openapi_doc)},
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIBundle.SwaggerUIStandalonePreset
+                ],
+                layout: "BaseLayout",
+                docExpansion: "list",
+                defaultModelsExpandDepth: 1,
+                defaultModelExpandDepth: 1,
+                defaultModelRendering: "example",
+                displayRequestDuration: true,
+                filter: true,
+                showExtensions: true
+            }});
+            window.ui = ui;
+        }};
+    </script>
+</body>
+</html>"""
+
+    return html
+
+
 def _prepare_conformance_alias_html_body(item: CatalogRecord, alias: str) -> Tuple[str, bool]:
     """
     Create the HTML representation of a conformance metadata that is associated with specified alias.
@@ -129,7 +401,7 @@ def _prepare_conformance_alias_html_body(item: CatalogRecord, alias: str) -> Tup
     :return: The HTML representation of the conformance metadata that is associated with specified alias.
     """
     try:
-        dynamodb_client = boto3.resource('dynamodb')
+        dynamodb_client = resource('dynamodb')
         api_methods_table = dynamodb_client.Table('api_conformance')
         result = api_methods_table.query(
             Select='ALL_ATTRIBUTES',
@@ -184,7 +456,7 @@ def _prepare_conformance_html_body(item: CatalogRecord, protocol: str) -> str:
     :param protocol: The Internet protocol used to communicate with this server.
     :return: The HTML Representation of the Conformance body.
     """
-    dynamodb_client = boto3.resource('dynamodb')
+    dynamodb_client = resource('dynamodb')
     api_methods_table = dynamodb_client.Table('api_conformance')
     conformance_items = api_methods_table.query(
         Select='ALL_ATTRIBUTES',
@@ -435,21 +707,19 @@ def _prepare_well_known_json(items: List[CatalogRecord], protocol: str) -> str:
 
 
 def _process_api_request(
-        accept: str, event: dict, host: str, items: List[CatalogRecord]
-) -> Tuple[str, str, str, str, int]:
+        host: str, items: List[CatalogRecord]
+) -> Tuple[str, str, Optional[str], Optional[str], int]:
     """
-    Process API requests and generate appropriate responses.
+    Construct a JSON body that conforms to the Open API 3.0 Specification.
 
-    This function handles requests to the '/api' endpoint and returns
-    the appropriate response based on the Accept header.
-
-    :param accept: The Accept header from the request
-    :param event: The event dict that contains the request parameters
-    :param host: The host from which the request was made
-    :param items: List of catalog records to process
+    :param host: The host from which the request was made.
+    :param items: List of catalog records to process.
     :return: A tuple containing (body, content_type, link_header, location_header, status_code)
     """
-    return '', '', '', '', 200
+    api_id = [item.api_id for item in items if item.domain == host][0]
+    body = json.dumps(_generate_openapi_document(api_id, 'latest'))
+
+    return body, 'application/vnd.oai.openapi+json;version=3.0', None, None, 200
 
 
 def _process_conformance_alias_request(accept, event, host, items):
@@ -531,21 +801,23 @@ def _process_conformance_request(accept, host, items, protocol):
 
 
 def _process_documentation_request(
-        accept: str, event: dict, host: str, items: List[CatalogRecord]
-) -> Tuple[str, str, str, str, int]:
+        host: str, items: List[CatalogRecord]
+) -> Tuple[str, str, Optional[str], Optional[str], int]:
     """
     Process documentation requests and generate appropriate responses.
 
     This function handles requests to the 'documentation' endpoint and returns
     the appropriate response based on the Accept header.
 
-    :param accept: The Accept header from the request
-    :param event: The event dict that contains the request parameters
     :param host: The host from which the request was made
     :param items: List of catalog records to process
     :return: A tuple containing (body, content_type, link_header, location_header, status_code)
     """
-    return '', '', '', '', 200
+    api_id = [item.api_id for item in items if item.domain == host][0]
+    openapi_doc = _generate_openapi_document(api_id, 'latest')
+    body = _generate_openapi_html(openapi_doc)
+
+    return body, 'text/html', None, None, 200
 
 
 def _process_landing_page_request(accept, host, items, protocol):
