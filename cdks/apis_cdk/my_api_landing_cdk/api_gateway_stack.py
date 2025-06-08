@@ -16,7 +16,8 @@ from aws_cdk import (
     aws_route53 as route53,
     aws_route53_targets as targets,
     Duration,
-    RemovalPolicy
+    RemovalPolicy,
+    aws_iam as iam
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
@@ -217,6 +218,14 @@ class MyApiGatewayStack(Stack):
             environment={
                 'PYTHONPATH': '/var/task'
             },
+        )
+
+        # Add permission for cross-account access from an account that the Greeting API resides in.
+        well_known_lambda.add_permission(
+            'AllowCrossAccountInvocation',
+            principal=iam.ServicePrincipal('lambda.amazonaws.com'),
+            action='lambda:InvokeFunction',
+            source_account='911737211406',  # greeting_cdk account ID
         )
 
         # Create the OpenAPI Lambda function
