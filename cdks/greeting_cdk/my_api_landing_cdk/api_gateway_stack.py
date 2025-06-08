@@ -138,12 +138,18 @@ class MyApiGatewayStack(Stack):
         # Create API resources and methods
         register_resource = api.root.add_resource('register')
         greeting_resource = api.root.add_resource('retrieve')
-        name_resource = greeting_resource.add_resource('{name}')
+        greeting_name_resource = greeting_resource.add_resource('{name}')
         user_management_resource = api.root.add_resource('user-management')
+        well_known_resource = api.root.add_resource('.well_known')
+        well_known_name_resource = well_known_resource.add_resource('{well_known_name}')
+        api_resource = api.root.add_resource('api')
+        documentation_resource = api.root.add_resource('documentation')
+        conformance_resource = api.root.add_resource('conformance')
+        conformance_name_resource = conformance_resource.add_resource('{conformance_name}')
 
         # Add GET method with authorizer to the greeting endpoint
         # noinspection PyTypeChecker
-        name_resource.add_method(
+        greeting_name_resource.add_method(
             'GET',
             api_gateway.LambdaIntegration(greeting_lambda),
             authorizer=authorizer,
