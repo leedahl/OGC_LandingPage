@@ -16,7 +16,8 @@ from aws_cdk import (
     aws_route53 as route53,
     aws_route53_targets as targets,
     Duration,
-    RemovalPolicy
+    RemovalPolicy,
+    aws_iam as iam
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
@@ -93,14 +94,23 @@ class MyApiGatewayStack(Stack):
         well_known_proxy_lambda = aws_lambda.Function(
             self, 'WellKnownProxyLambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
-            handler='ogc_landing.well_known_proxy.well_known_lambda.lambda_handler',
+            handler='ogc_landing.well_known.well_known_proxy_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src'),
             environment={
                 'PYTHONPATH': '/var/task',
                 'TARGET_ACCOUNT_ID': '047988295961',
-                'TARGET_FUNCTION_NAME': 'well_known_lambda',
+                'TARGET_FUNCTION_NAME': 'WellKnownLambda',
                 'TARGET_REGION': 'us-east-2'
             },
+        )
+
+        # Grant the well-known proxy Lambda permission to invoke the well-known Lambda in the other account
+        well_known_proxy_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=['lambda:InvokeFunction'],
+                resources=[f'arn:aws:lambda:us-east-2:047988295961:function:WellKnownLambda'],
+                effect=iam.Effect.ALLOW
+            )
         )
 
         # Create the user management Lambda function
