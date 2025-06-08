@@ -26,7 +26,7 @@ CatalogDomainRecord = namedtuple('CatalogDomainRecord', [
 
 
 # noinspection PyUnusedLocal
-def lambda_handler(event, context):
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Main entry point for the Lambda function that handles API catalog requests.
 
@@ -500,7 +500,7 @@ def _prepare_conformance_json_body(item: CatalogRecord) -> str:
     return f'{{"conformsTo": ["{'", "'.join(item.relations['conformance']['conformsTo'])}"]}}'
 
 
-def _prepare_landing_html_body(host, items, protocol):
+def _prepare_landing_html_body(host: str, items: List[CatalogRecord], protocol: str) -> str:
     """
     Creates the HTML body for the landing page.
 
@@ -542,7 +542,7 @@ def _prepare_landing_html_body(host, items, protocol):
     return body
 
 
-def _prepare_landing_json_body(item, protocol):
+def _prepare_landing_json_body(item: CatalogRecord, protocol: str) -> str:
     """
     Prepare the landing JSON body for an item.
 
@@ -722,7 +722,9 @@ def _process_api_request(
     return body, 'application/vnd.oai.openapi+json;version=3.0', None, None, 200
 
 
-def _process_conformance_alias_request(accept, event, host, items):
+def _process_conformance_alias_request(
+        accept: str, event: Dict[str, Any], host: str, items: List[CatalogRecord]
+) -> Tuple[str, str, Optional[str], Optional[str], int]:
     """
     Process conformance alias requests and generate appropriate responses.
 
@@ -761,7 +763,9 @@ def _process_conformance_alias_request(accept, event, host, items):
     return body, content_type, link_header, location_header, status_code
 
 
-def _process_conformance_request(accept, host, items, protocol):
+def _process_conformance_request(
+        accept: str, host: str, items: List[CatalogRecord], protocol: str
+) -> Tuple[str, str, Optional[str], Optional[str], int]:
     """
     Process conformance requests and generate appropriate responses.
 
@@ -820,7 +824,9 @@ def _process_documentation_request(
     return body, 'text/html', None, None, 200
 
 
-def _process_landing_page_request(accept, host, items, protocol):
+def _process_landing_page_request(
+        accept: str, host: str, items: List[CatalogRecord], protocol: str
+) -> Tuple[str, str, Optional[str], Optional[str], int]:
     """
     Process landing page requests and generate appropriate responses.
 
@@ -858,7 +864,9 @@ def _process_landing_page_request(accept, host, items, protocol):
     return body, content_type, link_header, location_header, status_code
 
 
-def _process_well_known_request(accept, event, host, items, protocol):
+def _process_well_known_request(
+        accept: str, event: Dict[str, Any], host: str, items: List[CatalogRecord], protocol: str
+) -> Tuple[str, str, Optional[str], Optional[str], int]:
     """
     Process well-known requests and generate appropriate responses.
 
