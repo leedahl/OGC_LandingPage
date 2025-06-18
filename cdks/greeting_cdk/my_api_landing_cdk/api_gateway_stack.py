@@ -53,10 +53,10 @@ class MyApiGatewayStack(Stack):
             self, 'AuthorizerLambda',
             function_name='AuthorizerLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.authorizer.authorizer_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src'),
+            code=aws_lambda.Code.from_asset('../../src/authorizer_lambda'),
             environment={
-                'PYTHONPATH': '/var/task',
                 'key_alias': 'hello_world'
             },
         )
@@ -71,11 +71,9 @@ class MyApiGatewayStack(Stack):
             self, 'GreetingLambda',
             function_name='GreetingLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.greeting.greeting_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src'),
-            environment={
-                'PYTHONPATH': '/var/task'
-            },
+            code=aws_lambda.Code.from_asset('../../src/greeting_lambda')
         )
 
         # Create the register Lambda function
@@ -84,10 +82,10 @@ class MyApiGatewayStack(Stack):
             self, 'RegisterLambda',
             function_name='RegisterLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.registration.register_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src'),
+            code=aws_lambda.Code.from_asset('../../src/registration_lambda'),
             environment={
-                'PYTHONPATH': '/var/task',
                 'key_alias': 'hello_world'
             },
         )
@@ -117,11 +115,12 @@ class MyApiGatewayStack(Stack):
             self, 'WellKnownProxyLambda',
             function_name='WellKnownProxyLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.well_known.well_known_proxy_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src'),
+            code=aws_lambda.Code.from_asset('../../src/well_known_proxy_lambda'),
+            timeout=Duration.seconds(10),
             role=well_known_proxy_role,  # Use the fixed role
             environment={
-                'PYTHONPATH': '/var/task',
                 'TARGET_ACCOUNT_ID': '047988295961',
                 'TARGET_FUNCTION_NAME': 'WellKnownLambda',
                 'TARGET_REGION': 'us-east-2'
@@ -134,10 +133,10 @@ class MyApiGatewayStack(Stack):
             self, 'UserManagementLambda',
             function_name='UserManagementLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.user_management.user_management_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src'),
+            code=aws_lambda.Code.from_asset('../../src/user_management_lambda'),
             environment={
-                'PYTHONPATH': '/var/task',
                 'key_alias': 'hello_world'
             },
         )
@@ -177,20 +176,46 @@ class MyApiGatewayStack(Stack):
         )
 
         # Create API resources and methods
+        index_resource = api.root.add_resource('index.html')
         register_resource = api.root.add_resource('register')
         greeting_resource = api.root.add_resource('retrieve')
         greeting_name_resource = greeting_resource.add_resource('{name}')
         user_management_resource = api.root.add_resource('user-management')
-        well_known_resource = api.root.add_resource('.well_known')
+        well_known_resource = api.root.add_resource('.well-known')
         well_known_name_resource = well_known_resource.add_resource('{well_known_name}')
         api_resource = api.root.add_resource('api')
         documentation_resource = api.root.add_resource('documentation')
         conformance_resource = api.root.add_resource('conformance')
-        conformance_name_resource = conformance_resource.add_resource('{conformance_name}')
+        conformance_name_resource = conformance_resource.add_resource('{conformance_alias}')
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        index_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
+        )
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        api.root.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
+        )
 
         # Add GET method with authorizer to the greeting endpoint
         # noinspection PyTypeChecker
         greeting_name_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(greeting_lambda),
+            authorizer=authorizer,
+            authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add a default registration endpoint
+        # noinspection PyTypeChecker
+        greeting_resource.add_method(
             'GET',
             api_gateway.LambdaIntegration(greeting_lambda),
             authorizer=authorizer,
@@ -213,16 +238,7 @@ class MyApiGatewayStack(Stack):
             authorization_type=api_gateway.AuthorizationType.NONE,
         )
 
-        # Add a default registration endpoint
-        # noinspection PyTypeChecker
-        greeting_resource.add_method(
-            'GET',
-            api_gateway.LambdaIntegration(greeting_lambda),
-            authorizer=authorizer,
-            authorization_type=api_gateway.AuthorizationType.CUSTOM,
-        )
-
-        # Add GET method to user management endpoint
+       # Add GET method to user management endpoint
         # noinspection PyTypeChecker
         user_management_resource.add_method(
             'GET',
@@ -264,7 +280,7 @@ class MyApiGatewayStack(Stack):
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
-        # Add GET method to the well-known endpoint
+       # Add GET method to the well-known endpoint
         # noinspection PyTypeChecker
         documentation_resource.add_method(
             'GET',

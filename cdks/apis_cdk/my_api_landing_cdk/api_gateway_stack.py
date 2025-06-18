@@ -23,7 +23,10 @@ from constructs import Construct
 
 
 class MyApiGatewayStack(Stack):
-    def __init__(self, scope: Construct, construct_id: str, certificate_stack: Stack, **kwargs) -> None:
+    def __init__(
+            self, scope: Construct, construct_id: str, certificate_stack: Stack, production_account: str,
+            **kwargs
+    ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         api_catalog = dynamodb.Table(
@@ -170,14 +173,6 @@ class MyApiGatewayStack(Stack):
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
         )
 
-        # Create KMS key for password encryption
-        kms_key = kms.Key(
-            self, 'PortfolioUserStoreAPIKey',
-            alias='portfolio_user_store_key',
-            enable_key_rotation=True,
-            removal_policy=RemovalPolicy.DESTROY,
-        )
-
         # Create DynamoDB table for user store
         user_table = dynamodb.Table(
             self, 'UserStore',
@@ -206,25 +201,31 @@ class MyApiGatewayStack(Stack):
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
         )
 
+        # Create KMS key for password encryption
+        kms_key = kms.Key(
+            self, 'PortfolioUserStoreAPIKey',
+            alias='portfolio_user_store_key',
+            enable_key_rotation=True,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+
         # Create the well-known Lambda function
         # noinspection PyTypeChecker
         well_known_lambda = aws_lambda.Function(
             self, 'WellKnownLambda',
             function_name='WellKnownLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.well_known.well_known_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src'),
-            timeout=Duration.seconds(10),
-            environment={
-                'PYTHONPATH': '/var/task'
-            },
+            code=aws_lambda.Code.from_asset('../../src/well_known_lambda'),
+            timeout=Duration.seconds(10)
         )
 
         aws_lambda.CfnPermission(
             self, 'ProxyLambdaInvokeAccess',
             action='lambda:InvokeFunction',
             function_name=well_known_lambda.function_arn,
-            principal='arn:aws:iam::911737211406:role/WellKnownProxyLambdaRole'
+            principal=f'arn:aws:iam::{production_account}:role/WellKnownProxyLambdaRole'
         )
 
         # Create the OpenAPI Lambda function
@@ -233,12 +234,10 @@ class MyApiGatewayStack(Stack):
             self, 'OpenApiLambda',
             function_name='OpenApiLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.openapi.openapi_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src'),
-            timeout=Duration.seconds(10),
-            environment={
-                'PYTHONPATH': '/var/task'
-            },
+            code=aws_lambda.Code.from_asset('../../src/openapi_lambda'),
+            timeout=Duration.seconds(10)
         )
 
         # Grant the WellKnown Lambda permission to access DynamoDB
@@ -272,10 +271,10 @@ class MyApiGatewayStack(Stack):
             self, 'AuthorizerLambda',
             function_name='AuthorizerLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.authorizer.authorizer_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src'),
+            code=aws_lambda.Code.from_asset('../../src/authorizer_lambda'),
             environment={
-                'PYTHONPATH': '/var/task',
                 'key_alias': 'portfolio_user_store_key'
             },
         )
@@ -291,10 +290,10 @@ class MyApiGatewayStack(Stack):
             self, 'RegisterLambda',
             function_name='RegisterLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.registration.register_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src'),
+            code=aws_lambda.Code.from_asset('../../src/registration_lambda'),
             environment={
-                'PYTHONPATH': '/var/task',
                 'key_alias': 'portfolio_user_store_key'
             },
         )
@@ -305,10 +304,10 @@ class MyApiGatewayStack(Stack):
             self, 'UserManagementLambda',
             function_name='UserManagementLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.user_management.user_management_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src'),
+            code=aws_lambda.Code.from_asset('../../src/user_management_lambda'),
             environment={
-                'PYTHONPATH': '/var/task',
                 'key_alias': 'portfolio_user_store_key'
             },
         )
@@ -345,7 +344,7 @@ class MyApiGatewayStack(Stack):
             self, 'ApiAuthorizer',
             handler=authorizer_lambda,
             identity_sources=[api_gateway.IdentitySource.header('Authorization')],
-            results_cache_ttl=Duration.seconds(0)  # Disable caching for testing
+            results_cache_ttl=Duration.seconds(0)  # Disable caching
         )
 
         # Create API resources and methods
