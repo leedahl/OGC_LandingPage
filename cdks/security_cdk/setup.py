@@ -15,7 +15,7 @@ with open("../../README.md") as fp:
 setuptools.setup(
     name="my_ap_security_cdk",
     version="0.1.0",
-    description="AWS CDK app for My Landing API Gateway",
+    description="AWS CDK app for My Security API",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Michael Leedahl",
