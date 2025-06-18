@@ -25,7 +25,8 @@ from constructs import Construct
 
 class MySecurityApiGatewayStack(Stack):
     def __init__(
-            self, scope: Construct, construct_id: str, certificate_stack: Stack, api_account: str, **kwargs
+            self, scope: Construct, construct_id: str, certificate_stack: Stack, api_account: str,
+            production_account: str, **kwargs
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
@@ -75,8 +76,15 @@ class MySecurityApiGatewayStack(Stack):
             handler='ogc_landing.authorizer.authorizer_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/authorizer_lambda'),
             environment={
-                'key_alias': 'portfolio_user_store_key'
+                'key_alias': 'security_user_store_key'
             }
+        )
+
+        aws_lambda.CfnPermission(
+            self, 'AuthorizerProxyLambdaInvokeAccess',
+            action='lambda:InvokeFunction',
+            function_name=authorizer_lambda.function_arn,
+            principal=f'arn:aws:iam::{production_account}:role/AuthorizerProxyLambdaRole'
         )
 
         # Grant the Authorizer Lambda permissions to access DynamoDB and KMS
@@ -147,8 +155,8 @@ class MySecurityApiGatewayStack(Stack):
             function_name='WellKnownProxyLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
-            handler='ogc_landing.well_known.well_known_proxy_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/well_known_proxy_lambda'),
+            handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
+            code=aws_lambda.Code.from_asset('../../src/proxy_lambda'),
             timeout=Duration.seconds(10),
             role=well_known_proxy_role,  # Use the fixed role
             environment={

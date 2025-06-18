@@ -19,6 +19,7 @@ app = App()
 
 deploy_account = environ.get('SECURITY_ACCOUNT')
 api_account = environ.get('ACCESS_ACCOUNT')
+production_account = environ.get('PRODUCTION_ACCOUNT')
 
 # Define the environment for deployment of Certificates
 env_us_east_1 = Environment(account=deploy_account, region="us-east-1")
@@ -43,7 +44,7 @@ copytree(
 # Create the API Gateway stack
 MySecurityApiGatewayStack(
     app, "MyApiSecurityStack", cross_region_references=True, certificate_stack=cert_stack,
-    api_account=api_account, env=env
+    api_account=api_account, production_account=production_account, env=env
 )
 
 app.synth()

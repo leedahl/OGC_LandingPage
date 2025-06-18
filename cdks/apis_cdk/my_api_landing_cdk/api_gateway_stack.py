@@ -216,7 +216,7 @@ class MyApiGatewayStack(Stack):
             function_name='WellKnownLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
-            handler='ogc_landing.well_known.well_known_lambda.lambda_handler',
+            handler='ogc_landing.proxy.well_known_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/well_known_lambda'),
             timeout=Duration.seconds(10)
         )
