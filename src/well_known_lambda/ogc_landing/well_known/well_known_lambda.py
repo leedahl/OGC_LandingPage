@@ -10,10 +10,10 @@
 
 import json
 from collections import namedtuple
+from decimal import Decimal
 from typing import List, Tuple, Dict, Any, Optional
 from boto3.dynamodb import conditions
 from boto3 import resource
-
 from botocore.exceptions import BotoCoreError
 
 CatalogRecord = namedtuple('CatalogRecord', [
@@ -37,7 +37,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     :param context: The context object provided by AWS Lambda
     :return: The response object containing status code, headers, and body
     """
-    print(event)
+    print(f'Received Event: {event}')
 
     if event.get('resource', '') == '/index.html':
         event['resource'] = '/'
@@ -83,7 +83,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         case '/conformance/{conformance_alias}':
             body, content_type, link_header, location_header, status_code = _process_conformance_alias_request(
-                accept, event, host, items
+                accept, event, host, items, protocol
             )
 
         case '/api':
@@ -98,6 +98,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             )
 
         case _:
+            print(f'Unhandled method: {event.get("resource", '')}')
             status_code = 404
             content_type = 'application/problem+json; charset=utf-8'
             body = json.dumps({'type': 'about:blank', 'title': 'Not Found'})
@@ -115,6 +116,37 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         'body': body,
         'isBase64Encoded': False
     }
+
+
+def _convert_decimal_to_int_or_float(obj: Any) -> Any:
+    """
+    Recursively convert Decimal values to int or float based on whether they have a fractional part.
+
+    Args:
+        obj: The object to convert, which may contain Decimal values
+
+    Returns:
+        The converted object with Decimal values replaced by int or float
+    """
+    if isinstance(obj, Decimal):
+        # Convert to int if the Decimal has no fractional part, otherwise to float
+        return int(obj) if obj % 1 == 0 else float(obj)
+
+    elif isinstance(obj, dict):
+        # Recursively process dictionaries
+        return {key: _convert_decimal_to_int_or_float(value) for key, value in obj.items()}
+
+    elif isinstance(obj, list):
+        # Recursively process lists
+        return [_convert_decimal_to_int_or_float(item) for item in obj]
+
+    elif isinstance(obj, tuple):
+        # Recursively process tuples
+        return tuple(_convert_decimal_to_int_or_float(item) for item in obj)
+
+    else:
+        # Return other types unchanged
+        return obj
 
 
 def _generate_openapi_document(api_id: str, version: str) -> Dict[str, Any]:
@@ -158,8 +190,10 @@ def _generate_openapi_document(api_id: str, version: str) -> Dict[str, Any]:
                 KeyConditionExpression=conditions.Key('api_id').eq(api_id)
             )
             if documents_response.get('Items'):
+                # Convert Decimal values to int or float
+                items = _convert_decimal_to_int_or_float(documents_response['Items'])
                 # Sort by version and get the latest
-                items = sorted(documents_response['Items'], key=lambda x: x['version'], reverse=True)
+                items = sorted(items, key=lambda x: x['version'], reverse=True)
                 document = items[0]
                 version = document['version']
             else:
@@ -167,7 +201,8 @@ def _generate_openapi_document(api_id: str, version: str) -> Dict[str, Any]:
         else:
             raise ValueError(f"API with id {api_id} and version {version} not found")
     else:
-        document = document_response['Item']
+        # Convert Decimal values to int or float
+        document = _convert_decimal_to_int_or_float(document_response['Item'])
 
     # Add an info section
     openapi_doc["info"] = {
@@ -190,8 +225,10 @@ def _generate_openapi_document(api_id: str, version: str) -> Dict[str, Any]:
     )
 
     if servers_response.get('Items'):
+        # Convert Decimal values to int or float
+        servers = _convert_decimal_to_int_or_float(servers_response['Items'])
         openapi_doc["servers"] = list()
-        for server in servers_response['Items']:
+        for server in servers:
             if server.get('version') == version:
                 server_obj = {
                     "url": server.get('url', ''),
@@ -207,9 +244,12 @@ def _generate_openapi_document(api_id: str, version: str) -> Dict[str, Any]:
         KeyConditionExpression=conditions.Key('api_id').eq(api_id)
     )
 
+    # Convert Decimal values to int or float
+    path_items = _convert_decimal_to_int_or_float(paths_response.get('Items', []))
+
     operations_table = dynamodb_resource.Table('openapi_operations')
 
-    for path_item in paths_response.get('Items', []):
+    for path_item in path_items:
         if path_item.get('version') != version:
             continue
 
@@ -228,7 +268,10 @@ def _generate_openapi_document(api_id: str, version: str) -> Dict[str, Any]:
             KeyConditionExpression=conditions.Key('api_id#path').eq(f"{api_id}#{path}")
         )
 
-        for operation in operations_response.get('Items', []):
+        # Convert Decimal values to int or float
+        operations = _convert_decimal_to_int_or_float(operations_response.get('Items', []))
+
+        for operation in operations:
             if operation.get('version') != version:
                 continue
 
@@ -273,7 +316,10 @@ def _generate_openapi_document(api_id: str, version: str) -> Dict[str, Any]:
         KeyConditionExpression=conditions.Key('api_id').eq(api_id)
     )
 
-    for component in components_response.get('Items', []):
+    # Convert Decimal values to int or float
+    components = _convert_decimal_to_int_or_float(components_response.get('Items', []))
+
+    for component in components:
         if component.get('version') != version:
             continue
 
@@ -293,8 +339,10 @@ def _generate_openapi_document(api_id: str, version: str) -> Dict[str, Any]:
     )
 
     if tags_response.get('Items'):
+        # Convert Decimal values to int or float
+        tags = _convert_decimal_to_int_or_float(tags_response['Items'])
         openapi_doc["tags"] = []
-        for tag in tags_response['Items']:
+        for tag in tags:
             if tag.get('version') == version:
                 tag_obj = {
                     "name": tag['tag_name'],
@@ -310,7 +358,10 @@ def _generate_openapi_document(api_id: str, version: str) -> Dict[str, Any]:
         KeyConditionExpression=conditions.Key('api_id').eq(api_id)
     )
 
-    for scheme in security_response.get('Items', []):
+    # Convert Decimal values to int or float
+    security_schemes = _convert_decimal_to_int_or_float(security_response.get('Items', []))
+
+    for scheme in security_schemes:
         if scheme.get('version') != version:
             continue
 
@@ -543,12 +594,14 @@ def _generate_openapi_html(openapi_doc: Dict[str, Any]) -> str:
     return html
 
 
-def _prepare_conformance_alias_html_body(item: CatalogRecord, alias: str) -> Tuple[str, bool]:
+def _prepare_conformance_alias_html_body(item: CatalogRecord, alias: str, host: str, protocol: str) -> Tuple[str, bool]:
     """
     Create the HTML representation of a conformance metadata that is associated with specified alias.
 
     :param item: The catalog record that contains information about the API that conforms to the specified alias.
     :param alias: The alias of the conformance requirement.
+    :param host: The website hostname.
+    :param protocol: The Internet Protocol used to access this page.
     :return: The HTML representation of the conformance metadata that is associated with specified alias.
     """
     try:
@@ -575,16 +628,18 @@ def _prepare_conformance_alias_html_body(item: CatalogRecord, alias: str) -> Tup
     else:
 
         body = (
-            '<DOCTYPE html>'
-            '<html>'
+            '<!DOCTYPE html>'
+            '<html lang="en">'
             '<head>'
-            '<style type="text/css">'
+            '<style>'
             'th, td {padding: 5px; text-align: left;}'
             '</style>'
             f'<title>{item.title} Conformance Metadata</title>'
             '</head>'
             '<body>'
             f'<h1>{item.title} Conformance Metadata</h1>'
+            f'<p><a href="{protocol}://{host}/">Home</a> &gt; <a href="{protocol}://{host}/conformance">Conformance</a> '
+            f'&gt; {alias}</p>'
             '<table>'
             '<tr><th>Conformance URI</th><th>Title</th></tr>'
             f'<tr><td>{conformance_item['conformance_uri']}</td><td>{conformance_item['title']}</td></tr>'
@@ -617,7 +672,7 @@ def _prepare_conformance_html_body(item: CatalogRecord, protocol: str) -> str:
     )
 
     return (
-        '<DOCTYPE html>'
+        '<!DOCTYPE html>'
         '<html lang="en">'
         '<head>'
         '<style type="text/css">'
@@ -648,7 +703,7 @@ def _prepare_conformance_json_body(item: CatalogRecord) -> str:
     :param item: A catalog record to use for reporting the conformance metadata.
     :return: The JSON Representation of the Conformance body.
     """
-    return f'{{"conformsTo": ["{'", "'.join(item.relations['conformance']['conformsTo'])}"]}}'
+    return f'{{"conformsTo": ["{'", "'.join(item.relations['service-meta']['conformsTo'])}"]}}'
 
 
 def _prepare_landing_html_body(host: str, items: List[CatalogRecord], protocol: str) -> str:
@@ -678,9 +733,9 @@ def _prepare_landing_html_body(host: str, items: List[CatalogRecord], protocol: 
             f'<a href="{protocol}://{item.domain}{item.anchor}'
             f'{item.relations['service-doc']['href']}" rel="service-doc">'
             f'{item.title}</a>: {item.description}<br/>'
-            f'<a href="{protocol}://{item.domain}{item.anchor}{item.relations['conformance']['href']}" '
-            f'rel="{item.relations['conformance']['rel']}">Conformance</a>: '
-            f'{item.relations['conformance']['title']}<br><br>'
+            f'<a href="{protocol}://{item.domain}{item.anchor}{item.relations['service-meta']['href']}" '
+            f'rel="{item.relations['service-meta']['rel']}">Conformance</a>: '
+            f'{item.relations['service-meta']['title']}<br><br>'
         )}'
         for item in items
     ])
@@ -733,13 +788,13 @@ def _prepare_landing_json_body(item: CatalogRecord, protocol: str) -> str:
             ],
             *[
                 {
-                    'rel': f'{item.relations['conformance']['rel']}',
+                    'rel': f'{item.relations['service-meta']['rel']}',
                     'type': service_desc_type,
-                    'title': item.relations['conformance']['title'],
+                    'title': item.relations['service-meta']['title'],
                     'href': f'{protocol}://{item.domain}{item.anchor}'
-                            f'{item.relations['conformance']['href']}'
+                            f'{item.relations['service-meta']['href']}'
                 }
-                for service_desc_type in item.relations['conformance']['types']
+                for service_desc_type in item.relations['service-meta']['types']
             ],
             *[{
                 'rel': 'self',
@@ -802,9 +857,9 @@ def _prepare_well_known_html(items: List[CatalogRecord], protocol: str) -> str:
 
                 '<tr><td class="top">Service Conformance Metadata</td>'
                 f'<td class="top"><a href="{protocol}://{item.domain}{item.anchor}'
-                f'{item.relations['conformance']['href']}" rel="{item.relations['conformance']['rel']}">'
-                f'{item.relations['conformance']['title']}</a></td>'
-                f'<td class="top">{'<br>'.join(item.relations['conformance']['types'])}</td></tr>'
+                f'{item.relations['service-meta']['href']}" rel="{item.relations['service-meta']['rel']}">'
+                f'{item.relations['service-meta']['title']}</a></td>'
+                f'<td class="top">{'<br>'.join(item.relations['service-meta']['types'])}</td></tr>'
 
                 '<tr><td><br></td><td><br></td><td><br></td></tr>'
                 for item in items if item.domain == domain.domain
@@ -846,9 +901,9 @@ def _prepare_well_known_json(items: List[CatalogRecord], protocol: str) -> str:
                     {
                         'type': service_desc_type,
                         'href': f'{protocol}://{item.domain}{item.anchor}'
-                                f'{item.relations['conformance']['href']}'
+                                f'{item.relations['service-meta']['href']}'
                     }
-                    for service_desc_type in item.relations['conformance']['types']
+                    for service_desc_type in item.relations['service-meta']['types']
                 ]
             }
             for item in items
@@ -874,7 +929,7 @@ def _process_api_request(
 
 
 def _process_conformance_alias_request(
-        accept: str, event: Dict[str, Any], host: str, items: List[CatalogRecord]
+        accept: str, event: Dict[str, Any], host: str, items: List[CatalogRecord], protocol: str
 ) -> Tuple[str, str, Optional[str], Optional[str], int]:
     """
     Process conformance alias requests and generate appropriate responses.
@@ -886,12 +941,13 @@ def _process_conformance_alias_request(
     :param event: The event dict that contains the request parameters
     :param host: The host from which the request was made
     :param items: List of catalog records to process
+    :param protocol: The Internet protocol used to access this API.
     :return: A tuple containing (body, content_type, link_header, location_header, status_code)
     """
     if 'text/html' in accept:
         alias = event['pathParameters']['conformance_alias']
         item = [entity for entity in items if entity.domain == host][0]
-        body, found = _prepare_conformance_alias_html_body(item, alias)
+        body, found = _prepare_conformance_alias_html_body(item, alias, host, protocol)
 
         if found:
             status_code = 200

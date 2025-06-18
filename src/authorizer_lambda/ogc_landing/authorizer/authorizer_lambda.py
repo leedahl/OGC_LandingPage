@@ -144,16 +144,16 @@ def process_authorization(
     api_parts = method_arn_parts[5].split('/')
 
     # Check if this is an openapi request with an api_id
-    is_openapi_request = len(api_parts) >= 5 and api_parts[3] == 'openapi' and len(api_parts) > 4
+    is_openapi_request = len(api_parts) >= 6 and api_parts[4] == 'openapi' and len(api_parts) > 4
 
     # If this is an openapi request with an api_id, check if the user owns the API
-    if (is_openapi_request and 
+    if (is_openapi_request and
         ('Item' in item_result) and 
         ('password' in item_result['Item']) and 
         password_matches and 
         (db_password is not None)):
 
-        api_id = api_parts[4]
+        api_id = api_parts[5]
 
         # Check if the user owns this API ID
         api_security_result = db_client.get_item(
@@ -173,8 +173,12 @@ def process_authorization(
             ('Item' in item_result) and
             ('password' in item_result['Item']) and
             password_matches and
-            (http_method == 'GET' or 
-             (http_method == 'POST' and 'user-management' in method_arn)) and
+            (http_method == 'GET' or
+             (
+                     http_method == 'POST' and
+                     ('user-management' in method_arn or 'openapi' in method_arn)
+             )
+            ) and
             (db_password is not None)
     ):
         result = allow_access(method_arn, username)
