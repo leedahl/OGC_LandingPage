@@ -10,14 +10,14 @@
 # SOFTWARE.
 
 from os import environ
-from shutil import copytree, rmtree
 from aws_cdk import App, Environment
 from my_api_landing_cdk.api_gateway_stack import MyApiGatewayStack
 from my_api_landing_cdk.api_gateway_stack_us_east_1 import MyCertificateStack
 
 app = App()
 
-deploy_account = environ.get('ACCESS_ACCOUNT')
+deploy_account = environ.get('PRODUCTION_ACCOUNT')
+security_account = environ.get('SECURITY_ACCOUNT')
 
 # Define the environment for deployment of Certificates
 env_us_east_1 = Environment(account=deploy_account, region="us-east-1")
@@ -28,23 +28,10 @@ cert_stack = MyCertificateStack(app, "MyCertificateStack", cross_region_referenc
 # Define the environment for deployment of APIs
 env = Environment(account=deploy_account, region="us-east-2")
 
-production_account = environ.get('PRODUCTION_ACCOUNT')
-
-copytree(
-    '../../src/security_library/ogc_landing/security/', '../../src/registration_lambda/ogc_landing/security/'
-)
-copytree(
-    '../../src/security_library/ogc_landing/security/',
-    '../../src/user_management_lambda/ogc_landing/security/'
-)
-
 # Create the API Gateway stack
 MyApiGatewayStack(
     app, "MyApiStack", cross_region_references=True, certificate_stack=cert_stack,
-    production_account=production_account, env=env
+    production_account=deploy_account, security_account=security_account, env=env
 )
 
 app.synth()
-
-rmtree('../../src/registration_lambda/ogc_landing/security')
-rmtree('../../src/user_management_lambda/ogc_landing/security')

@@ -87,6 +87,13 @@ class MySecurityApiGatewayStack(Stack):
             principal=f'arn:aws:iam::{production_account}:role/AuthorizerProxyLambdaRole'
         )
 
+        aws_lambda.CfnPermission(
+            self, 'APIAuthorizerProxyLambdaInvokeAccess',
+            action='lambda:InvokeFunction',
+            function_name=authorizer_lambda.function_arn,
+            principal=f'arn:aws:iam::{production_account}:role/APIAuthorizerProxyLambdaRole'
+        )
+
         # Grant the Authorizer Lambda permissions to access DynamoDB and KMS
         user_table.grant_read_data(authorizer_lambda)
         api_security_table.grant_read_data(authorizer_lambda)
