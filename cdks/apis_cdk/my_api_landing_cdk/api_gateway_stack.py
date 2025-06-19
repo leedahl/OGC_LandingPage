@@ -12,11 +12,11 @@ from aws_cdk import (
     aws_apigateway as api_gateway,
     aws_lambda,
     aws_dynamodb as dynamodb,
-    aws_kms as kms,
     aws_route53 as route53,
     aws_route53_targets as targets,
     Duration,
-    RemovalPolicy
+    RemovalPolicy,
+    aws_iam as iam
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
@@ -25,7 +25,7 @@ from constructs import Construct
 class MyApiGatewayStack(Stack):
     def __init__(
             self, scope: Construct, construct_id: str, certificate_stack: Stack, production_account: str,
-            **kwargs
+            security_account: str, **kwargs
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
@@ -173,42 +173,6 @@ class MyApiGatewayStack(Stack):
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
         )
 
-        # Create DynamoDB table for user store
-        user_table = dynamodb.Table(
-            self, 'UserStore',
-            table_name='user_store',
-            partition_key=dynamodb.Attribute(
-                name='username',
-                type=dynamodb.AttributeType.STRING
-            ),
-            removal_policy=RemovalPolicy.DESTROY,
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-        )
-
-        # Create DynamoDB table for API security (mapping username to api_id)
-        api_security_table = dynamodb.Table(
-            self, 'ApiSecurity',
-            table_name='api_security',
-            partition_key=dynamodb.Attribute(
-                name='username',
-                type=dynamodb.AttributeType.STRING
-            ),
-            sort_key=dynamodb.Attribute(
-                name='api_id',
-                type=dynamodb.AttributeType.STRING
-            ),
-            removal_policy=RemovalPolicy.DESTROY,
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-        )
-
-        # Create KMS key for password encryption
-        kms_key = kms.Key(
-            self, 'PortfolioUserStoreAPIKey',
-            alias='portfolio_user_store_key',
-            enable_key_rotation=True,
-            removal_policy=RemovalPolicy.DESTROY,
-        )
-
         # Create the well-known Lambda function
         # noinspection PyTypeChecker
         well_known_lambda = aws_lambda.Function(
@@ -216,7 +180,7 @@ class MyApiGatewayStack(Stack):
             function_name='WellKnownLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
-            handler='ogc_landing.proxy.well_known_lambda.lambda_handler',
+            handler='ogc_landing.well_known.well_known_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/well_known_lambda'),
             timeout=Duration.seconds(10)
         )
@@ -226,6 +190,13 @@ class MyApiGatewayStack(Stack):
             action='lambda:InvokeFunction',
             function_name=well_known_lambda.function_arn,
             principal=f'arn:aws:iam::{production_account}:role/WellKnownProxyLambdaRole'
+        )
+
+        aws_lambda.CfnPermission(
+            self, 'SecurityAPIProxyLambdaInvokeAccess',
+            action='lambda:InvokeFunction',
+            function_name=well_known_lambda.function_arn,
+            principal=f'arn:aws:iam::{security_account}:role/WellKnownProxyLambdaRole'
         )
 
         # Create the OpenAPI Lambda function
@@ -265,61 +236,42 @@ class MyApiGatewayStack(Stack):
         openapi_tags.grant_read_write_data(openapi_lambda)
         openapi_security_schemes.grant_read_write_data(openapi_lambda)
 
+        # Create a role with a fixed name for the well-known proxy Lambda function
+        authorizer_proxy_role = iam.Role(
+            self, 'APIAuthorizerProxyRole',
+            role_name='APIAuthorizerProxyLambdaRole',  # Fixed name without stack prefix or random suffix
+            assumed_by=iam.ServicePrincipal('lambda.amazonaws.com'),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole')
+            ]
+        )
+
+        # Grant the well-known proxy Lambda permission to invoke the well-known Lambda in the other account
+        authorizer_proxy_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=['lambda:InvokeFunction'],
+                resources=[f'arn:aws:lambda:us-east-2:{security_account}:function:AuthorizerLambda'],
+                effect=iam.Effect.ALLOW
+            )
+        )
+
         # Create the Authorizer Lambda function
         # noinspection PyTypeChecker
         authorizer_lambda = aws_lambda.Function(
-            self, 'AuthorizerLambda',
-            function_name='AuthorizerLambda',  # Custom name without stack prefix or random suffix
+            self, 'APIAuthorizerProxyLambda',
+            function_name='APIAuthorizerProxyLambda',  # Custom name without stack prefix or random suffix
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
-            handler='ogc_landing.authorizer.authorizer_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/authorizer_lambda'),
+            handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
+            code=aws_lambda.Code.from_asset('../../src/proxy_lambda'),
+            timeout=Duration.seconds(10),
+            role=authorizer_proxy_role,  # Use the fixed role
             environment={
-                'key_alias': 'portfolio_user_store_key'
-            },
+                'TARGET_ACCOUNT_ID': security_account,
+                'TARGET_FUNCTION_NAME': 'AuthorizerLambda',
+                'TARGET_REGION': 'us-east-2'
+            }
         )
-
-        # Grant the Authorizer Lambda permissions to access DynamoDB and KMS
-        user_table.grant_read_data(authorizer_lambda)
-        api_security_table.grant_read_data(authorizer_lambda)
-        kms_key.grant_decrypt(authorizer_lambda)
-
-        # Create the register Lambda function
-        # noinspection PyTypeChecker
-        register_lambda = aws_lambda.Function(
-            self, 'RegisterLambda',
-            function_name='RegisterLambda',  # Custom name without stack prefix or random suffix
-            runtime=aws_lambda.Runtime.PYTHON_3_12,
-            architecture=aws_lambda.Architecture.ARM_64,
-            handler='ogc_landing.registration.register_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/registration_lambda'),
-            environment={
-                'key_alias': 'portfolio_user_store_key'
-            },
-        )
-
-        # Create User Management Lambda
-        # noinspection PyTypeChecker
-        user_management_lambda = aws_lambda.Function(
-            self, 'UserManagementLambda',
-            function_name='UserManagementLambda',  # Custom name without stack prefix or random suffix
-            runtime=aws_lambda.Runtime.PYTHON_3_12,
-            architecture=aws_lambda.Architecture.ARM_64,
-            handler='ogc_landing.user_management.user_management_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/user_management_lambda'),
-            environment={
-                'key_alias': 'portfolio_user_store_key'
-            },
-        )
-
-        # Grant the Register Lambda permission to access DynamoDB
-        user_table.grant_read_write_data(register_lambda)
-        kms_key.grant_encrypt(register_lambda)
-
-        # Grant the User Management Lambda permission to access DynamoDB and KMS
-        user_table.grant_read_write_data(user_management_lambda)
-        api_security_table.grant_read_write_data(user_management_lambda)
-        kms_key.grant_encrypt_decrypt(user_management_lambda)
 
         # Create API Gateway
         api = api_gateway.RestApi(
@@ -355,8 +307,6 @@ class MyApiGatewayStack(Stack):
         conformance_alias_resource = conformance_resource.add_resource('{conformance_alias}')
         api_resource = api.root.add_resource('api')
         documentation_resource = api.root.add_resource('documentation')
-        register_resource = api.root.add_resource('register')
-        user_management_resource = api.root.add_resource('user-management')
 
         # Create OpenAPI resources
         openapi_resource = api_resource.add_resource('openapi')
@@ -453,51 +403,17 @@ class MyApiGatewayStack(Stack):
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
         )
 
-        # Add GET method for register resource
-        # noinspection PyTypeChecker
-        register_resource.add_method(
-            'GET',
-            api_gateway.LambdaIntegration(register_lambda),
-            authorization_type=api_gateway.AuthorizationType.NONE,
-        )
-
-        # Add POST method for register resource
-        # noinspection PyTypeChecker
-        register_resource.add_method(
-            'POST',
-            api_gateway.LambdaIntegration(register_lambda),
-            authorization_type=api_gateway.AuthorizationType.NONE,
-        )
-
-        # Add GET method to user management endpoint
-        # noinspection PyTypeChecker
-        user_management_resource.add_method(
-            'GET',
-            api_gateway.LambdaIntegration(user_management_lambda),
-            authorizer=authorizer,
-            authorization_type=api_gateway.AuthorizationType.CUSTOM,
-        )
-
-        # Add POST method to user management endpoint
-        # noinspection PyTypeChecker
-        user_management_resource.add_method(
-            'POST',
-            api_gateway.LambdaIntegration(user_management_lambda),
-            authorizer=authorizer,
-            authorization_type=api_gateway.AuthorizationType.CUSTOM,
-        )
-
         # Look up the hosted zone name
         hosted_zone = route53.HostedZone.from_lookup(
             self, 'HostedZone',
-            domain_name='i7es.click'
+            domain_name='portfolio.i7es.click'
         )
 
         # Create custom domain for API Gateway
         # noinspection PyTypeChecker,PyUnresolvedReferences
         domain = api_gateway.DomainName(
-            self, 'LandingDomain',
-            domain_name='i7es.click',
+            self, 'PortfolioDomain',
+            domain_name='portfolio.i7es.click',
             certificate=certificate_stack.certificate,
             endpoint_type=api_gateway.EndpointType.EDGE
         )
@@ -507,7 +423,7 @@ class MyApiGatewayStack(Stack):
 
         # Create DNS record to point to the API Gateway domain
         route53.ARecord(
-            self, 'LandingApiGatewayAliasRecord',
+            self, 'PortfolioApiGatewayAliasRecord',
             zone=hosted_zone,
             record_name='',
             target=route53.RecordTarget.from_alias(

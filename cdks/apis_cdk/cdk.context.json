@@ -10,5 +10,13 @@
   "hosted-zone:account=047988295961:domainName=i7es.click:region=us-east-1": {
     "Id": "/hostedzone/Z129TQOCSJ4TZT",
     "Name": "i7es.click."
+  },
+  "hosted-zone:account=911737211406:domainName=portfolio.i7es.click:region=us-east-1": {
+    "Id": "/hostedzone/Z01323602VYLO9VSH9YR",
+    "Name": "portfolio.i7es.click."
+  },
+  "hosted-zone:account=911737211406:domainName=portfolio.i7es.click:region=us-east-2": {
+    "Id": "/hostedzone/Z01323602VYLO9VSH9YR",
+    "Name": "portfolio.i7es.click."
   }
 }

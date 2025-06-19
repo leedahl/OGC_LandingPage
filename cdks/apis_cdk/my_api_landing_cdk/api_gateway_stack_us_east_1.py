@@ -10,8 +10,7 @@
 from aws_cdk import (
     Stack,
     aws_certificatemanager as acm,
-    aws_route53 as route53,
-    CfnOutput,
+    aws_route53 as route53
 )
 from constructs import Construct
 
@@ -23,12 +22,12 @@ class MyCertificateStack(Stack):
         # Look up the hosted zone name
         hosted_zone = route53.HostedZone.from_lookup(
             self, 'HostedZone',
-            domain_name='i7es.click'
+            domain_name='portfolio.i7es.click'
         )
 
         # Create ACM certificate for the domain
         self.certificate = acm.Certificate(
             self, 'LandingCertificate',
-            domain_name='i7es.click',
+            domain_name='portfolio.i7es.click',
             validation=acm.CertificateValidation.from_dns(hosted_zone)
         )

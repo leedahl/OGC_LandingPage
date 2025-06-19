@@ -22,7 +22,8 @@ from constructs import Construct
 
 class MyApiGatewayStack(Stack):
     def __init__(
-            self, scope: Construct, construct_id: str, certificate_stack: Stack, security_account: str, **kwargs
+            self, scope: Construct, construct_id: str, certificate_stack: Stack, security_account: str,
+            production_account: str, **kwargs
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
@@ -88,7 +89,7 @@ class MyApiGatewayStack(Stack):
         well_known_proxy_role.add_to_policy(
             iam.PolicyStatement(
                 actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:us-east-2:047988295961:function:WellKnownLambda'],
+                resources=[f'arn:aws:lambda:us-east-2:{production_account}:function:WellKnownLambda'],
                 effect=iam.Effect.ALLOW
             )
         )
@@ -105,7 +106,7 @@ class MyApiGatewayStack(Stack):
             timeout=Duration.seconds(10),
             role=well_known_proxy_role,  # Use the fixed role
             environment={
-                'TARGET_ACCOUNT_ID': '047988295961',
+                'TARGET_ACCOUNT_ID': production_account,
                 'TARGET_FUNCTION_NAME': 'WellKnownLambda',
                 'TARGET_REGION': 'us-east-2'
             }
