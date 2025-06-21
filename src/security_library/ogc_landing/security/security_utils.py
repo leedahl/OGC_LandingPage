@@ -119,3 +119,25 @@ def create_user(username, password):
     table.put_item(Item={'username': username, 'password': db_password, 'salt': salt})
 
     return True
+
+
+def delete_user(username):
+    """
+    Deletes a user with the given username from the database.
+
+    Args:
+        username (str): The username of the user to delete
+
+    Returns:
+        bool: True if the user was deleted successfully, False if the user doesn't exist
+    """
+    # Check if user exists
+    if not user_exists(username):
+        return False
+
+    # Delete the user from DynamoDB
+    dynamodb_client = boto3.resource('dynamodb')
+    table = dynamodb_client.Table('user_store')
+    table.delete_item(Key={'username': username})
+
+    return True

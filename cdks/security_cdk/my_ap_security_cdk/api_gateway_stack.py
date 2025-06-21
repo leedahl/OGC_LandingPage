@@ -25,8 +25,7 @@ from constructs import Construct
 
 class MySecurityApiGatewayStack(Stack):
     def __init__(
-            self, scope: Construct, construct_id: str, certificate_stack: Stack, api_account: str,
-            production_account: str, **kwargs
+            self, scope: Construct, construct_id: str, certificate_stack: Stack, production_account: str, **kwargs
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
@@ -108,6 +107,7 @@ class MySecurityApiGatewayStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.registration.register_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/registration_lambda'),
+            timeout=Duration.seconds(10),
             environment={
                 'key_alias': 'security_user_store_key'
             }
@@ -122,8 +122,9 @@ class MySecurityApiGatewayStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.user_management.user_management_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/user_management_lambda'),
+            timeout=Duration.seconds(10),
             environment={
-                'key_alias': 'portfolio_user_store_key'
+                'key_alias': 'security_user_store_key'
             }
         )
 
@@ -150,7 +151,7 @@ class MySecurityApiGatewayStack(Stack):
         well_known_proxy_role.add_to_policy(
             iam.PolicyStatement(
                 actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:us-east-2:{api_account}:function:WellKnownLambda'],
+                resources=[f'arn:aws:lambda:us-east-2:{production_account}:function:WellKnownLambda'],
                 effect=iam.Effect.ALLOW
             )
         )
@@ -167,7 +168,7 @@ class MySecurityApiGatewayStack(Stack):
             timeout=Duration.seconds(10),
             role=well_known_proxy_role,  # Use the fixed role
             environment={
-                'TARGET_ACCOUNT_ID': api_account,
+                'TARGET_ACCOUNT_ID': production_account,
                 'TARGET_FUNCTION_NAME': 'WellKnownLambda',
                 'TARGET_REGION': 'us-east-2'
             }
@@ -306,6 +307,15 @@ class MySecurityApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         user_management_resource.add_method(
             'POST',
+            api_gateway.LambdaIntegration(user_management_lambda),
+            authorizer=authorizer,
+            authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add DELETE method to user management endpoint
+        # noinspection PyTypeChecker
+        user_management_resource.add_method(
+            'DELETE',
             api_gateway.LambdaIntegration(user_management_lambda),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
