@@ -18,7 +18,6 @@ from my_ap_security_cdk.api_gateway_stack_us_east_1 import MySecurityCertificate
 app = App()
 
 deploy_account = environ.get('SECURITY_ACCOUNT')
-api_account = environ.get('ACCESS_ACCOUNT')
 production_account = environ.get('PRODUCTION_ACCOUNT')
 
 # Define the environment for deployment of Certificates
@@ -44,7 +43,7 @@ copytree(
 # Create the API Gateway stack
 MySecurityApiGatewayStack(
     app, "MyApiSecurityStack", cross_region_references=True, certificate_stack=cert_stack,
-    api_account=api_account, production_account=production_account, env=env
+     production_account=production_account, env=env
 )
 
 app.synth()

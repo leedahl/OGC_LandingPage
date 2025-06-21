@@ -7,6 +7,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from .security_utils import user_exists, encrypt_password, update_user_password, create_user
+from .security_utils import user_exists, encrypt_password, update_user_password, create_user, delete_user
 
-__all__ = ['user_exists', 'encrypt_password', 'update_user_password', 'create_user']
+__all__ = ['user_exists', 'encrypt_password', 'update_user_password', 'create_user', 'delete_user']

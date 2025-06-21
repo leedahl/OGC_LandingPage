@@ -13,6 +13,13 @@ from ogc_landing.security import user_exists, create_user
 
 # noinspection PyUnusedLocal
 def lambda_handler(event, context):
+    # Extract host and protocol information
+    headers = event.get('headers', {})
+    host = headers.get('Host', '')
+    # Extract protocol from CloudFront-Forwarded-Proto header, default to https if not present
+    protocol = headers.get('CloudFront-Forwarded-Proto', 'https')
+
+    current_year = 2025  # This should be dynamically generated in a real application
 
     event_body = event.get('body', '')
     event_body = event_body if event_body is not None else ''
@@ -25,14 +32,35 @@ def lambda_handler(event, context):
         if not _validate_username(username):
             body = (
                 '<!DOCTYPE HTML>'
-                '<html>'
+                '<html lang="en">'
                 '<head>'
-                "<title>Michael's Wonderful API Registration</title>"
+                "<title>Registration</title>"
+                '<style>'
+                '  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }'
+                '  header, nav, section, footer { margin-bottom: 20px; }'
+                '  header { background-color: #f5f5f5; padding: 10px; }'
+                '  nav { background-color: #eee; padding: 10px; }'
+                '  .content { padding: 20px; border: 1px solid #ddd; }'
+                '  .hidden { display: none; }'
+                '  footer { text-align: center; font-size: 0.8em; color: #666; }'
+                '</style>'
                 '</head>'
                 '<body>'
+                '<header>'
+                "<h1>Registration</h1>"
+                '</header>'
+                '<nav>'
+                f'<a href="{protocol}://{host}/">Home</a> &gt; <a href="{protocol}://{host}/register">Registration</a>'
+                '</nav>'
+                '<section class="content">'
                 "<h1>Registration Failed</h1>"
                 '<p>Invalid username. Username must contain only alphabetical and numerical characters, periods (.), underscores (_), and dashes (-).</p>'
                 '<p><a href="/register">Try Again</a></p>'
+                '</section>'
+                '<footer>'
+                f'&copy; {current_year} Michael Leedahl'
+                '</footer>'
+                '<script>showSection();</script>'
                 '</body>'
                 '</html>'
             )
@@ -47,14 +75,35 @@ def lambda_handler(event, context):
         if user_exists(username):
             body = (
                 '<!DOCTYPE HTML>'
-                '<html>'
+                '<html lang="en">'
                 '<head>'
-                "<title>Michael's Wonderful API Registration</title>"
+                "<title>Registration</title>"
+                '<style>'
+                '  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }'
+                '  header, nav, section, footer { margin-bottom: 20px; }'
+                '  header { background-color: #f5f5f5; padding: 10px; }'
+                '  nav { background-color: #eee; padding: 10px; }'
+                '  .content { padding: 20px; border: 1px solid #ddd; }'
+                '  .hidden { display: none; }'
+                '  footer { text-align: center; font-size: 0.8em; color: #666; }'
+                '</style>'
                 '</head>'
                 '<body>'
+                '<header>'
+                "<h1>Registration</h1>"
+                '</header>'
+                '<nav>'
+                f'<a href="{protocol}://{host}/">Home</a> &gt; <a href="{protocol}://{host}/register">Registration</a>'
+                '</nav>'
+                '<section class="content">'
                 "<h1>Registration Failed</h1>"
                 '<p>A user with this username already exists. Please choose a different username.</p>'
                 '<p><a href="/register">Try Again</a></p>'
+                '</section>'
+                '<footer>'
+                f'&copy; {current_year} Michael Leedahl'
+                '</footer>'
+                '<script>showSection();</script>'
                 '</body>'
                 '</html>'
             )
@@ -70,14 +119,35 @@ def lambda_handler(event, context):
 
         body = (
             '<!DOCTYPE HTML>'
-            '<html>'
+            '<html lang="en">'
             '<head>'
-            "<title>Michael's Wonderful API Registration</title>"
+            "<title>Registration</title>"
+            '<style>'
+            '  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }'
+            '  header, nav, section, footer { margin-bottom: 20px; }'
+            '  header { background-color: #f5f5f5; padding: 10px; }'
+            '  nav { background-color: #eee; padding: 10px; }'
+            '  .content { padding: 20px; border: 1px solid #ddd; }'
+            '  .hidden { display: none; }'
+            '  footer { text-align: center; font-size: 0.8em; color: #666; }'
+            '</style>'
             '</head>'
             '<body>'
+            '<header>'
+            "<h1>Registration</h1>"
+            '</header>'
+            '<nav>'
+            f'<a href="{protocol}://{host}/">Home</a> &gt; <a href="{protocol}://{host}/register">Registration</a>'
+            '</nav>'
+            '<section class="content">'
             "<h1>Thank you for registering for Michael's Wonderful APIs!</h1>"
             '<p>You may now use the the APIs as described in the API documentation on the homepage.<br>'
-            '<a href="/">Back to the HomePage</href></p>'
+            '<a href="/user-management">User Management</a></p>'
+            '</section>'
+            '<footer>'
+            f'&copy; {current_year} Michael Leedahl'
+            '</footer>'
+            '<script>showSection();</script>'
             '</body>'
             '</html>'
         )
@@ -86,11 +156,27 @@ def lambda_handler(event, context):
 
         body = (
             '<!DOCTYPE HTML>'
-            '<html>'
+            '<html lang="en">'
             '<head>'
-            "<title>Michael's Wonderful API Registration</title>"
+            "<title>Registration</title>"
+            '<style>'
+            '  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }'
+            '  header, nav, section, footer { margin-bottom: 20px; }'
+            '  header { background-color: #f5f5f5; padding: 10px; }'
+            '  nav { background-color: #eee; padding: 10px; }'
+            '  .content { padding: 20px; border: 1px solid #ddd; }'
+            '  .hidden { display: none; }'
+            '  footer { text-align: center; font-size: 0.8em; color: #666; }'
+            '</style>'
             '</head>'
             '<body>'
+            '<header>'
+            "<h1>Registration</h1>"
+            '</header>'
+            '<nav>'
+            f'<a href="{protocol}://{host}/">Home</a> &gt; <a href="{protocol}://{host}/register">Registration</a>'
+            '</nav>'
+            '<section class="content">'
             "<h1>Welcome to Michael's Wonderful API Registration</h1>"
             '<p>You can register to use the Greeting API by creating a username and password:</p>'
             '<form action="/register" method="POST">'
@@ -98,6 +184,11 @@ def lambda_handler(event, context):
             '<p>Password: <input type="password" name="password" /></p>'
             '<p><input type="submit" value="Register" /></p>'
             '</form>'
+            '</section>'
+            '<footer>'
+            f'&copy; {current_year} Michael Leedahl'
+            '</footer>'
+            '<script>showSection();</script>'
             '</body>'
             '</html>'
         )

@@ -177,6 +177,8 @@ def process_authorization(
              (
                      http_method == 'POST' and
                      ('user-management' in method_arn or 'openapi' in method_arn)
+             ) or (
+                        http_method == 'DELETE' and 'user-management' in method_arn
              )
             ) and
             (db_password is not None)
