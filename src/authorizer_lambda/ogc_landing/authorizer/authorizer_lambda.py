@@ -12,6 +12,7 @@ import binascii
 import re
 import boto3
 import os
+import hashlib
 from enum import Enum
 from typing import Optional
 
@@ -123,21 +124,19 @@ def process_authorization(
         db_password = None
         salt = None
 
-    # Check if the stored password contains the salt format
-    if db_password and ':' in db_password and salt:
-        # The stored password already includes the salt in format "salt:password"
-        # Compare with the provided password
-        stored_salt, stored_password = db_password.split(':', 1)
-        password_matches = stored_password == password
-
-    elif salt:
-        # Need to combine salt with provided password for comparison
+    # With our new approach, the decrypted value from the database is the SHA-256 hash of the salted password
+    if salt:
+        # Combine salt with the provided password
         salted_password = f"{salt}:{password}"
-        password_matches = db_password == salted_password
+
+        # Hash the salted password with SHA-256
+        hashed_salted_password = hashlib.sha256(salted_password.encode('utf_8')).hexdigest()
+
+        # Compare the hash with the decrypted value from the database
+        password_matches = db_password == hashed_salted_password
 
     else:
-        # Fallback for old entries without salt
-        password_matches = db_password == password
+        password_matches = False
 
     # Check if this is an openapi request with an api_id
     method_arn_parts = method_arn.split(':')

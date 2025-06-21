@@ -10,6 +10,7 @@
 import boto3
 import uuid
 import os
+import hashlib
 
 
 def user_exists(username):
@@ -46,14 +47,17 @@ def encrypt_password(password):
     # Generate a UUID to use as salt
     salt = str(uuid.uuid4())
 
-    # Combine salt and password for encryption
+    # Combine salt and password
     salted_password = f"{salt}:{password}"
+
+    # Hash the salted password with SHA-256
+    hashed_salted_password = hashlib.sha256(salted_password.encode('utf_8')).hexdigest()
 
     key_alias = os.environ.get('key_alias', 'hello_world')
 
     kms_client = boto3.client('kms')
     response = kms_client.encrypt(
-        Plaintext=salted_password.encode('utf_8'),
+        Plaintext=hashed_salted_password.encode('utf_8'),
         KeyId=f'alias/{key_alias}'
     )
 
