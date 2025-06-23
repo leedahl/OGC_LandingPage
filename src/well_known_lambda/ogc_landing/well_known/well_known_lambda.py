@@ -10,6 +10,7 @@
 
 import json
 from collections import namedtuple
+from datetime import datetime
 from decimal import Decimal
 from typing import List, Tuple, Dict, Any, Optional
 from boto3.dynamodb import conditions
@@ -392,6 +393,7 @@ def _generate_openapi_html(openapi_doc: Dict[str, Any]) -> str:
         str: HTML representation of the OpenAPI document
     """
     title = openapi_doc.get('info', {}).get('title', 'API Documentation')
+    current_year = datetime.now().year  # Dynamically get the current year
 
     # Create a basic HTML template with Swagger UI
     html = f"""<!DOCTYPE html>
@@ -401,12 +403,42 @@ def _generate_openapi_html(openapi_doc: Dict[str, Any]) -> str:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title} - OpenAPI Documentation</title>
     <style>
-        /* Basic reset */
+        /* Basic reset and common styles */
         body {{
             margin: 0;
             padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: Arial, sans-serif;
             color: #3b4151;
+        }}
+
+        /* Header, nav, section, footer styles */
+        header, nav, section, footer {{
+            margin-bottom: 20px;
+        }}
+
+        header {{
+            background-color: #f5f5f5;
+            padding: 10px;
+        }}
+
+        nav {{
+            background-color: #eee;
+            padding: 10px;
+        }}
+
+        .content {{
+            padding: 20px;
+            border: 1px solid #ddd;
+        }}
+
+        .hidden {{
+            display: none;
+        }}
+
+        footer {{
+            text-align: center;
+            font-size: 0.8em;
+            color: #666;
         }}
 
         /* Swagger UI container */
@@ -564,7 +596,18 @@ def _generate_openapi_html(openapi_doc: Dict[str, Any]) -> str:
     </style>
 </head>
 <body>
-    <div id="swagger-ui"></div>
+    <header>
+        <h1>{title} - OpenAPI Documentation</h1>
+    </header>
+    <nav>
+        <a href="/">Home</a> &gt; <a href="/documentation">API Documentation</a>
+    </nav>
+    <section class="content">
+        <div id="swagger-ui"></div>
+    </section>
+    <footer>
+        &copy; {current_year} Michael Leedahl
+    </footer>
     <script src="https://unpkg.com/swagger-ui-dist@3/swagger-ui-bundle.js"></script>
     <script>
         window.onload = function() {{
@@ -588,6 +631,7 @@ def _generate_openapi_html(openapi_doc: Dict[str, Any]) -> str:
             window.ui = ui;
         }};
     </script>
+    <script>showSection();</script>
 </body>
 </html>"""
 
@@ -604,6 +648,8 @@ def _prepare_conformance_alias_html_body(item: CatalogRecord, alias: str, host: 
     :param protocol: The Internet Protocol used to access this page.
     :return: The HTML representation of the conformance metadata that is associated with specified alias.
     """
+    current_year = datetime.now().year  # Dynamically get the current year
+
     try:
         dynamodb_client = resource('dynamodb')
         api_methods_table = dynamodb_client.Table('api_conformance')
@@ -632,19 +678,36 @@ def _prepare_conformance_alias_html_body(item: CatalogRecord, alias: str, host: 
             '<html lang="en">'
             '<head>'
             '<style>'
-            'th, td {padding: 5px; text-align: left;}'
+            '  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }'
+            '  header, nav, section, footer { margin-bottom: 20px; }'
+            '  header { background-color: #f5f5f5; padding: 10px; }'
+            '  nav { background-color: #eee; padding: 10px; }'
+            '  .content { padding: 20px; border: 1px solid #ddd; }'
+            '  .hidden { display: none; }'
+            '  footer { text-align: center; font-size: 0.8em; color: #666; }'
+            '  th, td {padding: 5px; text-align: left;}'
             '</style>'
             f'<title>{item.title} Conformance Metadata</title>'
             '</head>'
             '<body>'
+            '<header>'
             f'<h1>{item.title} Conformance Metadata</h1>'
-            f'<p><a href="{protocol}://{host}/">Home</a> &gt; <a href="{protocol}://{host}/conformance">Conformance</a> '
-            f'&gt; {alias}</p>'
+            '</header>'
+            '<nav>'
+            f'<a href="{protocol}://{host}/">Home</a> &gt; '
+            f'<a href="{protocol}://{host}/conformance">Conformance</a> &gt; {alias}'
+            '</nav>'
+            '<section class="content">'
             '<table>'
             '<tr><th>Conformance URI</th><th>Title</th></tr>'
             f'<tr><td>{conformance_item['conformance_uri']}</td><td>{conformance_item['title']}</td></tr>'
             '</table>'
             f'{bytes(conformance_item['description']).decode('utf_8')}'
+            '</section>'
+            '<footer>'
+            f'&copy; {current_year} Michael Leedahl'
+            '</footer>'
+            '<script>showSection();</script>'
             '</body>'
             '</html>'
         )
@@ -662,6 +725,7 @@ def _prepare_conformance_html_body(item: CatalogRecord, protocol: str) -> str:
     :param protocol: The Internet protocol used to communicate with this server.
     :return: The HTML Representation of the Conformance body.
     """
+    current_year = datetime.now().year  # Dynamically get the current year
     dynamodb_client = resource('dynamodb')
     api_methods_table = dynamodb_client.Table('api_conformance')
     conformance_items = api_methods_table.query(
@@ -675,13 +739,27 @@ def _prepare_conformance_html_body(item: CatalogRecord, protocol: str) -> str:
         '<!DOCTYPE html>'
         '<html lang="en">'
         '<head>'
-        '<style type="text/css">'
-        'th, td {text-align: left; padding: 5px;}'
+        '<style>'
+        '  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }'
+        '  header, nav, section, footer { margin-bottom: 20px; }'
+        '  header { background-color: #f5f5f5; padding: 10px; }'
+        '  nav { background-color: #eee; padding: 10px; }'
+        '  .content { padding: 20px; border: 1px solid #ddd; }'
+        '  .hidden { display: none; }'
+        '  footer { text-align: center; font-size: 0.8em; color: #666; }'
+        '  th, td {text-align: left; padding: 5px;}'
         '</style>'
         f'<title>{item.title} Conformance Metadata</title>'
         '</head>'
         '<body>'
+        '<header>'
         f'<h1>{item.title} Conformance Metadata</h1>'
+        '</header>'
+        '<nav>'
+        f'<a href="{protocol}://{item.domain}/">Home</a> &gt; '
+        f'<a href="{protocol}://{item.domain}{item.anchor}conformance">Conformance</a>'
+        '</nav>'
+        '<section class="content">'
         '<p>On this page you will find links to the Conformance Metadata for the Requirements this API conforms to.</p>'
         '<table>'
         '<tr><th>Conformance Metadata Links</th>'
@@ -691,6 +769,11 @@ def _prepare_conformance_html_body(item: CatalogRecord, protocol: str) -> str:
             for conformance_item in conformance_items['Items']
         ])}'
         '</table>'
+        '</section>'
+        '<footer>'
+        f'&copy; {current_year} Michael Leedahl'
+        '</footer>'
+        '<script>showSection();</script>'
         '</body>'
         '</html>'
     )
@@ -715,13 +798,31 @@ def _prepare_landing_html_body(host: str, items: List[CatalogRecord], protocol: 
     :param protocol: The protocol used to invoke the landing page.
     :return: The body of the landing page.
     """
+    current_year = datetime.now().year  # Dynamically get the current year
+
     body = (
         '<!DOCTYPE HTML>'
         '<html lang="en">'
         '<head>'
         "<title>Michael's Portfolio of APIs</title>"
+        '<style>'
+        '  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }'
+        '  header, nav, section, footer { margin-bottom: 20px; }'
+        '  header { background-color: #f5f5f5; padding: 10px; }'
+        '  nav { background-color: #eee; padding: 10px; }'
+        '  .content { padding: 20px; border: 1px solid #ddd; }'
+        '  .hidden { display: none; }'
+        '  footer { text-align: center; font-size: 0.8em; color: #666; }'
+        '</style>'
         '</head>'
         '<body>'
+        '<header>'
+        "<h1>Michael's Portfolio of APIs</h1>"
+        '</header>'
+        '<nav>'
+        f'<a href="{protocol}://{host}/">Home</a>'
+        '</nav>'
+        '<section class="content">'
         "<h1>Welcome to Michael's Portfolio of APIs</h1>"
         '<p>You can find the API documentation for all the wonderful APIs at the following links:</p>'
         '<p>'
@@ -741,6 +842,11 @@ def _prepare_landing_html_body(host: str, items: List[CatalogRecord], protocol: 
     ])
     body += (
         '</p>'
+        '</section>'
+        '<footer>'
+        f'&copy; {current_year} Michael Leedahl'
+        '</footer>'
+        '<script>showSection();</script>'
         '</body>'
         '</html>'
     )
@@ -821,23 +927,43 @@ def _prepare_well_known_html(items: List[CatalogRecord], protocol: str) -> str:
     :param protocol: The Internet protocol used to access this API.
     :return: The HTML representation of the Well-known catalog items.
     """
+    current_year = datetime.now().year  # Dynamically get the current year
     domains: List[CatalogDomainRecord] = list({
         CatalogDomainRecord(item.domain, item.catalog_order, item.title, item.description) for item in items
     })
     domains.sort(key=lambda item: item.catalog_order)
+
+    # Get the first domain to use in navigation
+    first_domain = domains[0].domain if domains else ""
 
     return (
         '<!DOCTYPE html>'
         '<html lang="en">'
         '<head>'
         '<style>'
-        'th.left {text-align: left}'
-        'th, td {padding: 5px}'
-        'td.top {vertical-align: top}'
+        '  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }'
+        '  header, nav, section, footer { margin-bottom: 20px; }'
+        '  header { background-color: #f5f5f5; padding: 10px; }'
+        '  nav { background-color: #eee; padding: 10px; }'
+        '  .content { padding: 20px; border: 1px solid #ddd; }'
+        '  .hidden { display: none; }'
+        '  footer { text-align: center; font-size: 0.8em; color: #666; }'
+        '  th.left {text-align: left}'
+        '  th, td {padding: 5px}'
+        '  td.top {vertical-align: top}'
         '</style>'
         "<title>Michael's Portfolio Listing of API Documentation Endpoints</title>"
         '</head>'
-        "<body><h1>Michael's Portfolio Listing of API Documentation Endpoints</h1><table>"
+        '<body>'
+        '<header>'
+        "<h1>Michael's Portfolio Listing of API Documentation Endpoints</h1>"
+        '</header>'
+        '<nav>'
+        f'<a href="{protocol}://{first_domain}/">Home</a> &gt; '
+        f'<a href="{protocol}://{first_domain}/.well-known/api-catalog">API Catalog</a>'
+        '</nav>'
+        '<section class="content">'
+        '<table>'
         f'{''.join([
             '<tr>'
             f'<th colspan="3" class="left">{domain.title}: {domain.description}</th>'
@@ -865,7 +991,15 @@ def _prepare_well_known_html(items: List[CatalogRecord], protocol: str) -> str:
                 for item in items if item.domain == domain.domain
             ])}'
             for domain in domains
-        ])}</table></body></html>'
+        ])}'
+        '</table>'
+        '</section>'
+        '<footer>'
+        f'&copy; {current_year} Michael Leedahl'
+        '</footer>'
+        '<script>showSection();</script>'
+        '</body>'
+        '</html>'
     )
 
 

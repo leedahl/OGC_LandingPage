@@ -9,6 +9,7 @@
 # SOFTWARE.
 from ogc_landing.security import user_exists, update_user_password, delete_user
 import base64
+from datetime import datetime
 
 
 # noinspection PyUnusedLocal
@@ -78,7 +79,7 @@ def lambda_handler(event, context):
 
             # Check if user exists
             if not user_exists(username):
-                current_year = 2025  # This should be dynamically generated in a real application
+                current_year = datetime.now().year  # Dynamically get the current year
                 body = (
                     '<!DOCTYPE HTML>'
                     '<html lang="en">'
@@ -123,7 +124,7 @@ def lambda_handler(event, context):
             # Delete the user account
             delete_user(username)
 
-            current_year = 2025  # This should be dynamically generated in a real application
+            current_year = datetime.now().year  # Dynamically get the current year
             body = (
                 '<!DOCTYPE HTML>'
                 '<html lang="en">'
@@ -188,7 +189,7 @@ def lambda_handler(event, context):
 
                 # Check if user exists
                 if not user_exists(username):
-                    current_year = 2025  # This should be dynamically generated in a real application
+                    current_year = datetime.now().year  # Dynamically get the current year
                     body = (
                         '<!DOCTYPE HTML>'
                         '<html lang="en">'
@@ -233,7 +234,7 @@ def lambda_handler(event, context):
                 # Update the user's password
                 update_user_password(username, new_password)
 
-                current_year = 2025  # This should be dynamically generated in a real application
+                current_year = datetime.now().year  # Dynamically get the current year
                 body = (
                     '<!DOCTYPE HTML>'
                     '<html lang="en">'
@@ -277,7 +278,7 @@ def lambda_handler(event, context):
 
             elif action == 'delete_account':
                 # Redirect to confirmation page
-                current_year = 2025  # This should be dynamically generated in a real application
+                current_year = datetime.now().year  # Dynamically get the current year
                 body = (
                     '<!DOCTYPE HTML>'
                     '<html lang="en">'
@@ -325,7 +326,7 @@ def lambda_handler(event, context):
                 }
 
     # Default: show the user management form with radio buttons
-    current_year = 2025  # This should be dynamically generated in a real application
+    current_year = datetime.now().year  # Dynamically get the current year
 
     body = (
         '<!DOCTYPE HTML>'

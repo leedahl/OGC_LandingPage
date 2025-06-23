@@ -8,6 +8,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import unicodedata
+from datetime import datetime
 from ogc_landing.security import user_exists, create_user
 
 
@@ -19,7 +20,7 @@ def lambda_handler(event, context):
     # Extract protocol from CloudFront-Forwarded-Proto header, default to https if not present
     protocol = headers.get('CloudFront-Forwarded-Proto', 'https')
 
-    current_year = 2025  # This should be dynamically generated in a real application
+    current_year = datetime.now().year  # Dynamically get the current year
 
     event_body = event.get('body', '')
     event_body = event_body if event_body is not None else ''
