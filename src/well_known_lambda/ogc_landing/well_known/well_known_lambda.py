@@ -18,7 +18,7 @@ from boto3 import resource
 from botocore.exceptions import BotoCoreError
 
 CatalogRecord = namedtuple('CatalogRecord', [
-    'api_id', 'catalog_order', 'anchor', 'description', 'domain', 'relations', 'title'
+    'api_id', 'catalog_order', 'anchor', 'description', 'domain', 'relations', 'title', 'landing_page_links'
 ])
 
 CatalogDomainRecord = namedtuple('CatalogDomainRecord', [
@@ -40,7 +40,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     print(f'Received Event: {event}')
 
-    if event.get('resource', '') == '/index.html':
+    original_resource = event.get('resource', '')
+    if event.get('resource', '').endswith('.html'):
         event['resource'] = '/'
         if 'headers' not in event or event['headers'] is None:
             event['headers'] = dict()
@@ -65,7 +66,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     items = [
         CatalogRecord(
             item['api_id'], item['catalog_order'], item['anchor'], item['description'], item['domain'],
-            item['relations'], item['title']
+            item['relations'], item['title'], item['landing_page_links']
         )
         for item in api_catalog['Items']
     ]
@@ -95,7 +96,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         case '/':
             body, content_type, link_header, location_header, status_code = _process_landing_page_request(
-                accept, host, items, protocol
+                accept, host, items, protocol, original_resource
             )
 
         case _:
@@ -789,67 +790,46 @@ def _prepare_conformance_json_body(item: CatalogRecord) -> str:
     return f'{{"conformsTo": ["{'", "'.join(item.relations['service-meta']['conformsTo'])}"]}}'
 
 
-def _prepare_landing_html_body(host: str, items: List[CatalogRecord], protocol: str) -> str:
+def _prepare_landing_html_body(item: CatalogRecord, original_resource: str) -> str:
     """
     Creates the HTML body for the landing page.
 
-    :param host: The host of the landing page.
-    :param items: The catalog API items.
-    :param protocol: The protocol used to invoke the landing page.
+    :param item: The catalog API item for the landing page.
+    :param original_resource: The original resource URL Path for a link on the landing page.
     :return: The body of the landing page.
     """
     current_year = datetime.now().year  # Dynamically get the current year
 
-    body = (
-        '<!DOCTYPE HTML>'
-        '<html lang="en">'
-        '<head>'
-        "<title>Michael's Portfolio of APIs</title>"
-        '<style>'
-        '  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }'
-        '  header, nav, section, footer { margin-bottom: 20px; }'
-        '  header { background-color: #f5f5f5; padding: 10px; }'
-        '  nav { background-color: #eee; padding: 10px; }'
-        '  .content { padding: 20px; border: 1px solid #ddd; }'
-        '  .hidden { display: none; }'
-        '  footer { text-align: center; font-size: 0.8em; color: #666; }'
-        '</style>'
-        '</head>'
-        '<body>'
-        '<header>'
-        "<h1>Michael's Portfolio of APIs</h1>"
-        '</header>'
-        '<nav>'
-        f'<a href="{protocol}://{host}/">Home</a>'
-        '</nav>'
-        '<section class="content">'
-        "<h1>Welcome to Michael's Portfolio of APIs</h1>"
-        '<p>You can find the API documentation for all the wonderful APIs at the following links:</p>'
-        '<p>'
-        f'<a href="{protocol}://{host}/.well-known/api-catalog" rel="api-catalog">'
-        f"Michael's portfolio of APIs.</a><br><br>"
-    )
-    body += ''.join([
-        f'{(
-            f'<a href="{protocol}://{item.domain}{item.anchor}'
-            f'{item.relations['service-doc']['href']}" rel="service-doc">'
-            f'{item.title}</a>: {item.description}<br/>'
-            f'<a href="{protocol}://{item.domain}{item.anchor}{item.relations['service-meta']['href']}" '
-            f'rel="{item.relations['service-meta']['rel']}">Conformance</a>: '
-            f'{item.relations['service-meta']['title']}<br><br>'
-        )}'
-        for item in items
+    body = '\r'.join([
+        f'<!DOCTYPE html>',
+        f'<html lang="en">',
+        f'  <head>',
+        f'    <title>{item.title}</title>',
+        f'    <style>',
+        f'      body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; }}',
+        f'      header, nav, section, footer {{ margin-bottom: 20px; }}',
+        f'      header {{ background-color: #f5f5f5; padding: 10px; }}',
+        f'      nav {{ background-color: #eee; padding: 10px; }}',
+        f'      .content {{ padding: 20px; border: 1px solid #ddd; }}',
+        f'      footer {{ text-align: center; font-size: 0.8em; color: #666; }}',
+        f'    </style>',
+        f'  </head>',
+        f'  <body>',
+        f'    <header><h1>{item.title}</h1></header>',
+        f'    <nav>',
+        ' &gt;\r'.join([
+            f'      <a href="{link['href']}" rel="{link['rel']}">{link['title']}</a>' if link['anchor']
+            else f'      {link['title']}'
+            for link in item.landing_page_links[original_resource]['nav_links']
+        ]),
+        f'    </nav>',
+        f'    <section class="content">',
+        f'{bytes(item.landing_page_links[original_resource]['summary']).decode("utf_8")}',
+        f'    </section>',
+        f'    <footer>&copy; {current_year} Michael Leedahl</footer>',
+        f'  </body>',
+        f'</html>'
     ])
-    body += (
-        '</p>'
-        '</section>'
-        '<footer>'
-        f'&copy; {current_year} Michael Leedahl'
-        '</footer>'
-        '<script>showSection();</script>'
-        '</body>'
-        '</html>'
-    )
 
     return body
 
@@ -1166,7 +1146,7 @@ def _process_documentation_request(
 
 
 def _process_landing_page_request(
-        accept: str, host: str, items: List[CatalogRecord], protocol: str
+        accept: str, host: str, items: List[CatalogRecord], protocol: str, original_resource: str
 ) -> Tuple[str, str, Optional[str], Optional[str], int]:
     """
     Process landing page requests and generate appropriate responses.
@@ -1178,18 +1158,23 @@ def _process_landing_page_request(
     :param host: The host from which the request was made
     :param items: List of catalog records to process
     :param protocol: The protocol used for the request (http/https)
+    :param original_resource: The original resource URL path
     :return: A tuple containing (body, content_type, link_header, location_header, status_code)
     """
+    item = [entity for entity in items if entity.domain == host][0]
     if 'text/html' in accept:
+        if original_resource == '/':
+            original_resource = '/index.html'
+
+        body = _prepare_landing_html_body(item, original_resource)
+
         status_code = 200
-        body = _prepare_landing_html_body(host, items, protocol)
         content_type = 'text/html; charset=utf-8'
         link_header = '</.well-known/api-catalog>; rel=api-catalog'
         location_header = '/index.html'
 
     elif 'application/json' in accept:
         status_code = 200
-        item = [entity for entity in items if entity.domain == host][0]
         body = _prepare_landing_json_body(item, protocol)
         content_type = 'application/json; charset=utf-8'
         link_header = None

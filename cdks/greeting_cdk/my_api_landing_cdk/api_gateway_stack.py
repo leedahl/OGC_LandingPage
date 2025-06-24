@@ -140,6 +140,9 @@ class MyApiGatewayStack(Stack):
 
         # Create API resources and methods
         index_resource = api.root.add_resource('index.html')
+        basic_authentication_resource = api.root.add_resource('basic_authentication.html')
+        basic_authentication_issues_resource = api.root.add_resource('basic_authentication_issues.html')
+        describe_security_controls_resource = api.root.add_resource('describe_security_controls.html')
         greeting_resource = api.root.add_resource('retrieve')
         greeting_name_resource = greeting_resource.add_resource('{name}')
         well_known_resource = api.root.add_resource('.well-known')
@@ -152,6 +155,30 @@ class MyApiGatewayStack(Stack):
         # Add GET method to the well-known endpoint
         # noinspection PyTypeChecker
         index_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
+        )
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        basic_authentication_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
+        )
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        basic_authentication_issues_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE
+        )
+
+        # Add GET method to the well-known endpoint
+        # noinspection PyTypeChecker
+        describe_security_controls_resource.add_method(
             'GET',
             api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
