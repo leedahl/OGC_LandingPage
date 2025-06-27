@@ -50,16 +50,6 @@ def lambda_handler(event, context):
             # If there's any error in decoding, continue with other methods
             print(f'WARNING: {ex}')
 
-    # If username not found in Authorization header, try other common locations
-    if not username and 'requestContext' in event and 'authorizer' in event['requestContext']:
-        username = event['requestContext']['authorizer'].get('principalId', '')
-
-    if not username and 'pathParameters' in event and event['pathParameters']:
-        username = event['pathParameters'].get('username', '')
-
-    if not username and 'queryStringParameters' in event and event['queryStringParameters']:
-        username = event['queryStringParameters'].get('username', '')
-
     if http_method == 'DELETE':
         # Process account deletion
         event_body = event.get('body', '')

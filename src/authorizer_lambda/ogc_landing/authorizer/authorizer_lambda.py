@@ -7,6 +7,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
 import base64
 import binascii
 import re
@@ -24,19 +25,24 @@ class _AuthenticationStatus(Enum):
 
 # noinspection PyUnusedLocal
 def lambda_handler(event, context):
-    print(event)
-
     if (
             ('requestContext' in event) and ('identity' in event['requestContext'])
             and ('clientCert' in event['requestContext']['identity'])
     ):
+        print('Processing Certificate Authorization Request')
         result = process_cert_authorization(event)
 
     elif all([
         event.get('headers', dict()) is not None,
         (
-                ('Authorization' in event.get('headers', dict())) and
-                event.get('headers', dict())['Authorization'].startswith('Basic ')
+                (
+                        ('Authorization' in event.get('headers', dict())) and
+                        event.get('headers', dict())['Authorization'].startswith('Basic ')
+                ) or
+                (
+                    ('authorization' in event.get('headers', dict())) and
+                    event.get('headers', dict())['authorization'].startswith('Basic ')
+                )
         )
     ]):
         result = process_header_authorization(event)
@@ -65,8 +71,9 @@ def process_cert_authorization(event: dict) -> dict:
 
 def process_header_authorization(event: dict) -> dict:
     try:
-        b64_value = event['headers']['Authorization'].replace('Basic ', '')
-        value = base64.b64decode(b64_value, validate=True).decode('ascii')
+        authorization_header = 'Authorization' if 'Authorization' in event['headers'] else 'authorization'
+        b64_value = event['headers'][authorization_header].replace('Basic ', '')
+        value = base64.b64decode(b64_value, validate=True).decode('utf_8')
         matches = re.match(
             '^([A-Za-z0-9_.@-]*):'
             '([A-Za-z0-9!@#$%^&*()\\[\\]\\\\{};<>,.?/~`+=_-]*$)', value
@@ -79,6 +86,7 @@ def process_header_authorization(event: dict) -> dict:
         http_method = event['requestContext']['httpMethod']
         method_arn = event['methodArn']
 
+        print(f'Processing Authorization Request for {username}.')
         result = process_authorization(username, password, http_method, method_arn)
 
     except binascii.Error:
@@ -103,6 +111,7 @@ def process_authorization(
     )
 
     if 'Item' in item_result:
+        print(f'A record for {username} was found.')
         cipher_text = item_result['Item']['password']['B']
 
         # Get the salt from the item result
@@ -119,6 +128,7 @@ def process_authorization(
         db_password = response['Plaintext'].decode('utf_8')
 
         kms_client.close()
+        print(f'The password for {username} was decoded.')
 
     else:
         db_password = None
@@ -126,6 +136,7 @@ def process_authorization(
 
     # With our new approach, the decrypted value from the database is the SHA-256 hash of the salted password
     if salt:
+        print(f'The salt for {username} was found.')
         # Combine salt with the provided password
         salted_password = f"{salt}:{password}"
 
@@ -134,6 +145,7 @@ def process_authorization(
 
         # Compare the hash with the decrypted value from the database
         password_matches = db_password == hashed_salted_password
+        print(f'The password match result: {password_matches}.')
 
     else:
         password_matches = False
@@ -144,6 +156,7 @@ def process_authorization(
 
     # Check if this is an openapi request with an api_id
     is_openapi_request = len(api_parts) >= 6 and api_parts[4] == 'openapi' and len(api_parts) > 4
+    print(f'is_openapi_request: {is_openapi_request}')
 
     # If this is an openapi request with an api_id, check if the user owns the API
     if (is_openapi_request and
@@ -168,23 +181,33 @@ def process_authorization(
             # User doesn't own this API ID
             return deny_access(_AuthenticationStatus.FORBIDDEN, method_arn, username)
 
-    if (
-            ('Item' in item_result) and
-            ('password' in item_result['Item']) and
-            password_matches and
-            (http_method == 'GET' or
-             (
-                     http_method == 'POST' and
-                     ('user-management' in method_arn or 'openapi' in method_arn)
-             ) or (
-                        http_method == 'DELETE' and 'user-management' in method_arn
-             )
-            ) and
-            (db_password is not None)
-    ):
+    if 'Item' in item_result and 'password' in item_result['Item'] and password_matches and db_password is not None:
+        # noinspection PyUnreachableCode
+        match http_method:
+            case 'GET':
+                # noinspection PyUnusedLocal
+                request_valid = True
+
+            case 'POST':
+                # noinspection PyUnusedLocal
+                request_valid = 'user-management' in method_arn or 'openapi' in method_arn or 'csr' in method_arn
+
+            case 'DELETE':
+                # noinspection PyUnusedLocal
+                request_valid = 'user-management' in method_arn or 'csr' in method_arn
+
+            case _:
+                # noinspection PyUnusedLocal
+                request_valid = False
+    else:
+        request_valid = False
+
+    if request_valid:
+        print(f'The password for {username} matches and an Allow Result is being produced.')
         result = allow_access(method_arn, username)
 
     else:
+        print(f'The password for {username} does not match an a Deny Result is being produced.')
         result = deny_access(_AuthenticationStatus.FORBIDDEN, method_arn, username)
 
     return result

@@ -13,7 +13,7 @@ with open("../../README.md") as fp:
     long_description = fp.read()
 
 setuptools.setup(
-    name="my_ap_security_cdk",
+    name="security_stacks_cdk",
     version="0.1.0",
     description="AWS CDK app for My Security API",
     long_description=long_description,

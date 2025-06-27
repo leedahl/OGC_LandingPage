@@ -7,69 +7,41 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
 from aws_cdk import (
     Stack,
     aws_apigateway as api_gateway,
     aws_lambda,
     aws_dynamodb as dynamodb,
     aws_kms as kms,
+    Duration,
+    aws_iam as iam,
     aws_route53 as route53,
     aws_route53_targets as targets,
-    Duration,
-    RemovalPolicy,
-    aws_iam as iam
+    aws_certificatemanager as acm
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
 
 
-class MySecurityApiGatewayStack(Stack):
+class SecurityApiGatewayRegionalStack(Stack):
     def __init__(
-            self, scope: Construct, construct_id: str, certificate_stack: Stack, production_account: str, **kwargs
+            self, scope: Construct, construct_id: str, production_account: str,
+            user_table: dynamodb.Table, api_security_table: dynamodb.Table,
+            kms_key: kms.Key, region_name: str, **kwargs
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Create DynamoDB table for user store
-        user_table = dynamodb.Table(
-            self, 'UserStore',
-            table_name='user_store',
-            partition_key=dynamodb.Attribute(
-                name='username',
-                type=dynamodb.AttributeType.STRING
-            ),
-            removal_policy=RemovalPolicy.DESTROY,
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-        )
-
-        # Create DynamoDB table for API security (mapping username to api_id)
-        api_security_table = dynamodb.Table(
-            self, 'ApiSecurity',
-            table_name='api_security',
-            partition_key=dynamodb.Attribute(
-                name='username',
-                type=dynamodb.AttributeType.STRING
-            ),
-            sort_key=dynamodb.Attribute(
-                name='api_id',
-                type=dynamodb.AttributeType.STRING
-            ),
-            removal_policy=RemovalPolicy.DESTROY,
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-        )
-
-        # Create KMS key for password encryption
-        kms_key = kms.Key(
-            self, 'SecurityUserStoreAPIKey',
-            alias='security_user_store_key',
-            enable_key_rotation=True,
-            removal_policy=RemovalPolicy.DESTROY,
-        )
+        # Store the DynamoDB tables and KMS key
+        self.user_table = user_table
+        self.api_security_table = api_security_table
+        self.kms_key = kms_key
 
         # Create the Authorizer Lambda function
         # noinspection PyTypeChecker
         authorizer_lambda = aws_lambda.Function(
             self, 'AuthorizerLambda',
-            function_name='AuthorizerLambda',  # Custom name without stack prefix or random suffix
+            function_name=f'Authorizer{region_name}Lambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.authorizer.authorizer_lambda.lambda_handler',
@@ -79,30 +51,31 @@ class MySecurityApiGatewayStack(Stack):
             }
         )
 
-        aws_lambda.CfnPermission(
-            self, 'AuthorizerProxyLambdaInvokeAccess',
-            action='lambda:InvokeFunction',
-            function_name=authorizer_lambda.function_arn,
-            principal=f'arn:aws:iam::{production_account}:role/AuthorizerProxyLambdaRole'
-        )
+        if self.region == 'us-east-2':
+            aws_lambda.CfnPermission(
+                self, 'GreetingAuthorizerProxyLambdaInvokeAccess',
+                action='lambda:InvokeFunction',
+                function_name=authorizer_lambda.function_arn,
+                principal=f'arn:aws:iam::{production_account}:role/GreetingAuthorizerProxyLambdaRole'
+            )
 
-        aws_lambda.CfnPermission(
-            self, 'APIAuthorizerProxyLambdaInvokeAccess',
-            action='lambda:InvokeFunction',
-            function_name=authorizer_lambda.function_arn,
-            principal=f'arn:aws:iam::{production_account}:role/APIAuthorizerProxyLambdaRole'
-        )
+            aws_lambda.CfnPermission(
+                self, 'APIAuthorizerProxyLambdaInvokeAccess',
+                action='lambda:InvokeFunction',
+                function_name=authorizer_lambda.function_arn,
+                principal=f'arn:aws:iam::{production_account}:role/APIAuthorizerProxyLambdaRole'
+            )
 
         # Grant the Authorizer Lambda permissions to access DynamoDB and KMS
-        user_table.grant_read_data(authorizer_lambda)
-        api_security_table.grant_read_data(authorizer_lambda)
-        kms_key.grant_decrypt(authorizer_lambda)
+        self.user_table.grant_read_data(authorizer_lambda)
+        self.api_security_table.grant_read_data(authorizer_lambda)
+        self.kms_key.grant_decrypt(authorizer_lambda)
 
         # Create the register Lambda function
         # noinspection PyTypeChecker
         register_lambda = aws_lambda.Function(
             self, 'RegisterLambda',
-            function_name='RegisterLambda',  # Custom name without stack prefix or random suffix
+            function_name=f'Register{region_name}Lambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.registration.register_lambda.lambda_handler',
@@ -117,7 +90,7 @@ class MySecurityApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         user_management_lambda = aws_lambda.Function(
             self, 'UserManagementLambda',
-            function_name='UserManagementLambda',  # Custom name without stack prefix or random suffix
+            function_name=f'UserManagement{region_name}Lambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.user_management.user_management_lambda.lambda_handler',
@@ -129,18 +102,18 @@ class MySecurityApiGatewayStack(Stack):
         )
 
         # Grant the Register Lambda permission to access DynamoDB
-        user_table.grant_read_write_data(register_lambda)
-        kms_key.grant_encrypt(register_lambda)
+        self.user_table.grant_read_write_data(register_lambda)
+        self.kms_key.grant_encrypt(register_lambda)
 
         # Grant the User Management Lambda permission to access DynamoDB and KMS
-        user_table.grant_read_write_data(user_management_lambda)
-        api_security_table.grant_read_write_data(user_management_lambda)
-        kms_key.grant_encrypt_decrypt(user_management_lambda)
+        self.user_table.grant_read_write_data(user_management_lambda)
+        self.api_security_table.grant_read_write_data(user_management_lambda)
+        self.kms_key.grant_encrypt_decrypt(user_management_lambda)
 
         # Create a role with a fixed name for the well-known proxy Lambda function
         well_known_proxy_role = iam.Role(
             self, 'WellKnownProxyRole',
-            role_name='WellKnownProxyLambdaRole',  # Fixed name without stack prefix or random suffix
+            role_name=f'WellKnownProxyLambda{region_name}Role',
             assumed_by=iam.ServicePrincipal('lambda.amazonaws.com'),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole')
@@ -160,7 +133,7 @@ class MySecurityApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         well_known_proxy_lambda = aws_lambda.Function(
             self, 'WellKnownProxyLambda',
-            function_name='WellKnownProxyLambda',  # Custom name without stack prefix or random suffix
+            function_name=f'WellKnownProxy{region_name}Lambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
@@ -175,15 +148,65 @@ class MySecurityApiGatewayStack(Stack):
         )
 
         # Create API Gateway
-        api = api_gateway.RestApi(
+        self.api = api_gateway.RestApi(
             self, 'MyApiSecurity',
-            rest_api_name='My API Security Service',
+            rest_api_name=f'API Security Service in {self.region}',  # Region-specific name
             description='Security services for APIs.',
+        )
+
+        # Create custom domain name and Route53 record
+        # Look up the hosted zone
+        hosted_zone = route53.HostedZone.from_lookup(
+            self, 'HostedZone',
+            domain_name='security.i7es.click'
+        )
+
+        # Create ACM certificate for the domain
+        self.certificate = acm.Certificate(
+            self, 'SecurityCertificate',
+            domain_name='security.i7es.click',
+            validation=acm.CertificateValidation.from_dns(hosted_zone)
+        )
+        # Create custom domain name for API Gateway
+        # noinspection PyTypeChecker
+        domain_name = api_gateway.DomainName(
+            self, 'SecurityApiDomain',
+            domain_name='security.i7es.click',
+            certificate=self.certificate,
+            endpoint_type=api_gateway.EndpointType.REGIONAL,
+            security_policy=api_gateway.SecurityPolicy.TLS_1_2
+        )
+
+        # Add base path mapping to connect the domain name to the API
+        domain_name.add_base_path_mapping(
+            self.api,
+            base_path=''  # Empty string means root path
+        )
+
+        # Create Route53 record with latency routing policy
+        route53.ARecord(
+            self, 'SecurityApiAliasRecordA',
+            zone=hosted_zone,
+            record_name='',  # Empty string means apex domain
+            target=route53.RecordTarget.from_alias(
+                targets.ApiGatewayDomain(domain_name)
+            ),
+            region=self.region
+        )
+
+        route53.AaaaRecord(
+            self, 'SecurityApiAliasRecordAaaa',
+            zone=hosted_zone,
+            record_name='',  # Empty string means apex domain
+            target=route53.RecordTarget.from_alias(
+                targets.ApiGatewayDomain(domain_name)
+            ),
+            region=self.region
         )
 
         # Configure 401 Gateway Response to include WWW-Authenticate header
         # noinspection PyTypeChecker
-        api.add_gateway_response(
+        self.api.add_gateway_response(
             'Unauthorized',
             type=ResponseType.UNAUTHORIZED,
             response_headers={
@@ -201,15 +224,15 @@ class MySecurityApiGatewayStack(Stack):
         )
 
         # Create API resources and methods
-        index_resource = api.root.add_resource('index.html')
-        well_known_resource = api.root.add_resource('.well-known')
+        index_resource = self.api.root.add_resource('index.html')
+        well_known_resource = self.api.root.add_resource('.well-known')
         well_known_name_resource = well_known_resource.add_resource('{well_known_name}')
-        conformance_resource = api.root.add_resource('conformance')
+        conformance_resource = self.api.root.add_resource('conformance')
         conformance_alias_resource = conformance_resource.add_resource('{conformance_alias}')
-        api_resource = api.root.add_resource('api')
-        documentation_resource = api.root.add_resource('documentation')
-        register_resource = api.root.add_resource('register')
-        user_management_resource = api.root.add_resource('user-management')
+        api_resource = self.api.root.add_resource('api')
+        documentation_resource = self.api.root.add_resource('documentation')
+        register_resource = self.api.root.add_resource('register')
+        user_management_resource = self.api.root.add_resource('user-management')
 
         # Add Get method with well-known name endpoint.
         # noinspection PyTypeChecker
@@ -261,7 +284,7 @@ class MySecurityApiGatewayStack(Stack):
 
         # Add an index page
         # noinspection PyTypeChecker
-        api.root.add_method(
+        self.api.root.add_method(
             'GET',
             api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE,
@@ -319,32 +342,4 @@ class MySecurityApiGatewayStack(Stack):
             api_gateway.LambdaIntegration(user_management_lambda),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
-        )
-
-        # Look up the hosted zone name
-        hosted_zone = route53.HostedZone.from_lookup(
-            self, 'HostedZone',
-            domain_name='security.i7es.click'
-        )
-
-        # Create custom domain for API Gateway
-        # noinspection PyTypeChecker,PyUnresolvedReferences
-        domain = api_gateway.DomainName(
-            self, 'SecurityDomain',
-            domain_name='security.i7es.click',
-            certificate=certificate_stack.certificate,
-            endpoint_type=api_gateway.EndpointType.EDGE
-        )
-
-        # Map the custom domain to the API
-        domain.add_base_path_mapping(api, stage=api.deployment_stage)
-
-        # Create DNS record to point to the API Gateway domain
-        route53.ARecord(
-            self, 'SecurityApiGatewayAliasRecord',
-            zone=hosted_zone,
-            record_name='',
-            target=route53.RecordTarget.from_alias(
-                targets.ApiGatewayDomain(domain)
-            )
         )

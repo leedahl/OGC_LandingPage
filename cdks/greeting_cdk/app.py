@@ -10,8 +10,8 @@
 # SOFTWARE.
 from aws_cdk import App, Environment
 from os import environ
-from my_api_landing_cdk.api_gateway_stack import MyApiGatewayStack
-from my_api_landing_cdk.api_gateway_stack_us_east_1 import MyCertificateStack
+from greeting_stacks_cdk.api_gateway_stack import MyApiGatewayStack
+from greeting_stacks_cdk.api_gateway_stack_us_east_1 import MyCertificateStack
 
 app = App()
 
@@ -30,9 +30,12 @@ cert_stack = MyCertificateStack(
 env = Environment(account=deploy_account, region="us-east-2")
 
 # Create the API Gateway stack
-MyApiGatewayStack(
+api_gateway_stack = MyApiGatewayStack(
     app, "GreetingApiStack", cross_region_references=True, certificate_stack=cert_stack,
     security_account=security_account, production_account=deploy_account, env=env
 )
+
+# Add dependency to ensure certificate stack is created first
+api_gateway_stack.add_dependency(cert_stack)
 
 app.synth()

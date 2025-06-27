@@ -186,17 +186,52 @@ class MyApiGatewayStack(Stack):
         )
 
         aws_lambda.CfnPermission(
-            self, 'ProxyLambdaInvokeAccess',
+            self, 'GreetingProxyLambdaInvokeAccess',
             action='lambda:InvokeFunction',
             function_name=well_known_lambda.function_arn,
             principal=f'arn:aws:iam::{production_account}:role/WellKnownProxyLambdaRole'
         )
 
         aws_lambda.CfnPermission(
-            self, 'SecurityAPIProxyLambdaInvokeAccess',
+            self, 'SecurityProxyLambdaOhioInvokeAccess',
             action='lambda:InvokeFunction',
             function_name=well_known_lambda.function_arn,
-            principal=f'arn:aws:iam::{security_account}:role/WellKnownProxyLambdaRole'
+            principal=f'arn:aws:iam::{security_account}:role/WellKnownProxyLambdaOhioRole'
+        )
+
+        aws_lambda.CfnPermission(
+            self, 'SecurityProxyLambdaVirginiaInvokeAccess',
+            action='lambda:InvokeFunction',
+            function_name=well_known_lambda.function_arn,
+            principal=f'arn:aws:iam::{security_account}:role/WellKnownProxyLambdaVirginiaRole'
+        )
+
+        aws_lambda.CfnPermission(
+            self, 'SecurityProxyLambdaNorthCaliforniaInvokeAccess',
+            action='lambda:InvokeFunction',
+            function_name=well_known_lambda.function_arn,
+            principal=f'arn:aws:iam::{security_account}:role/WellKnownProxyLambdaNorthCaliforniaRole'
+        )
+
+        aws_lambda.CfnPermission(
+            self, 'SecurityProxyLambdaOregonInvokeAccess',
+            action='lambda:InvokeFunction',
+            function_name=well_known_lambda.function_arn,
+            principal=f'arn:aws:iam::{security_account}:role/WellKnownProxyLambdaOregonRole'
+        )
+
+        aws_lambda.CfnPermission(
+            self, 'SecurityProxyLambdaIrelandInvokeAccess',
+            action='lambda:InvokeFunction',
+            function_name=well_known_lambda.function_arn,
+            principal=f'arn:aws:iam::{security_account}:role/WellKnownProxyLambdaIrelandRole'
+        )
+
+        aws_lambda.CfnPermission(
+            self, 'SecurityProxyLambdaFrankfurtInvokeAccess',
+            action='lambda:InvokeFunction',
+            function_name=well_known_lambda.function_arn,
+            principal=f'arn:aws:iam::{security_account}:role/WellKnownProxyLambdaFrankfurtRole'
         )
 
         # Create the OpenAPI Lambda function
@@ -423,7 +458,16 @@ class MyApiGatewayStack(Stack):
 
         # Create DNS record to point to the API Gateway domain
         route53.ARecord(
-            self, 'PortfolioApiGatewayAliasRecord',
+            self, 'PortfolioApiGatewayAliasRecordA',
+            zone=hosted_zone,
+            record_name='',
+            target=route53.RecordTarget.from_alias(
+                targets.ApiGatewayDomain(domain)
+            )
+        )
+
+        route53.AaaaRecord(
+            self, 'PortfolioApiGatewayAliasRecordAaaa',
             zone=hosted_zone,
             record_name='',
             target=route53.RecordTarget.from_alias(

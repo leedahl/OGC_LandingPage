@@ -29,8 +29,8 @@ class MyApiGatewayStack(Stack):
 
         # Create a role with a fixed name for the well-known proxy Lambda function
         authorizer_proxy_role = iam.Role(
-            self, 'AuthorizerProxyRole',
-            role_name='AuthorizerProxyLambdaRole',  # Fixed name without stack prefix or random suffix
+            self, 'GreetingAuthorizerProxyRole',
+            role_name='GreetingAuthorizerProxyLambdaRole',  # Fixed name without stack prefix or random suffix
             assumed_by=iam.ServicePrincipal('lambda.amazonaws.com'),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole')
@@ -41,7 +41,7 @@ class MyApiGatewayStack(Stack):
         authorizer_proxy_role.add_to_policy(
             iam.PolicyStatement(
                 actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:us-east-2:{security_account}:function:AuthorizerLambda'],
+                resources=[f'arn:aws:lambda:us-east-2:{security_account}:function:AuthorizerOhioLambda'],
                 effect=iam.Effect.ALLOW
             )
         )
@@ -59,7 +59,7 @@ class MyApiGatewayStack(Stack):
             role=authorizer_proxy_role,  # Use the fixed role
             environment = {
                 'TARGET_ACCOUNT_ID': security_account,
-                'TARGET_FUNCTION_NAME': 'AuthorizerLambda',
+                'TARGET_FUNCTION_NAME': 'AuthorizerOhioLambda',
                 'TARGET_REGION': 'us-east-2'
             }
         )
