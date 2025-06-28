@@ -38,7 +38,6 @@ class ApiGatewayRegionalStack(Stack):
             openapi_components: dynamodb.Table,
             openapi_tags: dynamodb.Table,
             openapi_security_schemes: dynamodb.Table,
-            production_account: str,
             security_account: str,
             region_name: str,
             **kwargs
@@ -112,14 +111,6 @@ class ApiGatewayRegionalStack(Stack):
             self, 'WellKnownLambdaLogRetention',
             log_group_name=f'/aws/lambda/{well_known_lambda.function_name}',
             retention=logs.RetentionDays.ONE_WEEK
-        )
-
-        # Add permissions for the well-known Lambda to be invoked by the greeting proxy
-        aws_lambda.CfnPermission(
-            self, 'GreetingProxyLambdaInvokeAccess',
-            action='lambda:InvokeFunction',
-            function_name=well_known_lambda.function_arn,
-            principal=f'arn:aws:iam::{production_account}:role/WellKnownProxyLambdaRole'
         )
 
         # Add permissions for the well-known Lambda to be invoked by the security proxy in the same region

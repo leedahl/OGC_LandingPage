@@ -60,7 +60,6 @@ for region, region_name in regions.items():
         openapi_components=main_stack.openapi_components,
         openapi_tags=main_stack.openapi_tags,
         openapi_security_schemes=main_stack.openapi_security_schemes,
-        production_account=deploy_account,
         security_account=security_account,
         region_name=region_name,
         cross_region_references=True,
