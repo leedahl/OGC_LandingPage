@@ -214,7 +214,7 @@ class MyApiGatewayStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.well_known.well_known_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/well_known_lambda'),
-            timeout=Duration.seconds(10)
+            timeout=Duration.seconds(29)
         )
 
         # Configure CloudWatch logs with 7-day retention policy
@@ -282,7 +282,7 @@ class MyApiGatewayStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.openapi.openapi_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/openapi_lambda'),
-            timeout=Duration.seconds(10)
+            timeout=Duration.seconds(29)
         )
 
         # Configure CloudWatch logs with 7-day retention policy
@@ -326,7 +326,7 @@ class MyApiGatewayStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.backup.backup_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/backup_lambda'),
-            timeout=Duration.seconds(60),  # Longer timeout for backup operations
+            timeout=Duration.seconds(29),
             environment={
                 'BACKUP_BUCKET_NAME': backup_bucket.bucket_name
             }
@@ -381,7 +381,7 @@ class MyApiGatewayStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/proxy_lambda'),
-            timeout=Duration.seconds(10),
+            timeout=Duration.seconds(29),
             role=authorizer_proxy_role,  # Use the fixed role
             environment={
                 'TARGET_ACCOUNT_ID': security_account,
@@ -506,8 +506,7 @@ class MyApiGatewayStack(Stack):
         index_resource.add_method(
             'GET',
             api_gateway.LambdaIntegration(
-                well_known_lambda,
-                timeout = Duration.seconds(10)  # Set timeout to 10 seconds
+                well_known_lambda
             ),
             authorization_type=api_gateway.AuthorizationType.NONE,
         )
@@ -517,8 +516,7 @@ class MyApiGatewayStack(Stack):
         openapi_resource.add_method(
             'POST',
             api_gateway.LambdaIntegration(
-                openapi_lambda,
-                timeout=Duration.seconds(10)  # Set timeout to 10 seconds
+                openapi_lambda
             ),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
@@ -529,8 +527,7 @@ class MyApiGatewayStack(Stack):
         openapi_api_id_resource.add_method(
             'POST',
             api_gateway.LambdaIntegration(
-                openapi_lambda,
-                timeout=Duration.seconds(10)  # Set timeout to 10 seconds
+                openapi_lambda
             ),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
@@ -541,8 +538,7 @@ class MyApiGatewayStack(Stack):
         backup_resource.add_method(
             'POST',
             api_gateway.LambdaIntegration(
-                backup_lambda,
-                timeout=Duration.seconds(60)  # Set timeout to 60 seconds for backup operations
+                backup_lambda
             ),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
@@ -553,8 +549,7 @@ class MyApiGatewayStack(Stack):
         restore_resource.add_method(
             'POST',
             api_gateway.LambdaIntegration(
-                backup_lambda,
-                timeout=Duration.seconds(60)  # Set timeout to 60 seconds for restore operations
+                backup_lambda
             ),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
@@ -565,8 +560,7 @@ class MyApiGatewayStack(Stack):
         restore_id_resource.add_method(
             'POST',
             api_gateway.LambdaIntegration(
-                backup_lambda,
-                timeout=Duration.seconds(60)  # Set timeout to 60 seconds for restore operations
+                backup_lambda
             ),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
@@ -577,8 +571,7 @@ class MyApiGatewayStack(Stack):
         delete_id_resource.add_method(
             'DELETE',
             api_gateway.LambdaIntegration(
-                backup_lambda,
-                timeout=Duration.seconds(60)  # Set timeout to 60 seconds for delete operations
+                backup_lambda
             ),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
@@ -589,8 +582,7 @@ class MyApiGatewayStack(Stack):
         list_resource.add_method(
             'GET',
             api_gateway.LambdaIntegration(
-                backup_lambda,
-                timeout=Duration.seconds(30)  # Set timeout to 30 seconds for list operations
+                backup_lambda
             ),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,

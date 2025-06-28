@@ -47,6 +47,7 @@ class SecurityApiGatewayRegionalStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.authorizer.authorizer_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/authorizer_lambda'),
+            timeout=Duration.seconds(29),
             environment={
                 'key_alias': 'security_user_store_key'
             }
@@ -88,7 +89,7 @@ class SecurityApiGatewayRegionalStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.registration.register_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/registration_lambda'),
-            timeout=Duration.seconds(10),
+            timeout=Duration.seconds(29),
             environment={
                 'key_alias': 'security_user_store_key'
             }
@@ -110,7 +111,7 @@ class SecurityApiGatewayRegionalStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.user_management.user_management_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/user_management_lambda'),
-            timeout=Duration.seconds(10),
+            timeout=Duration.seconds(29),
             environment={
                 'key_alias': 'security_user_store_key'
             }
@@ -160,7 +161,7 @@ class SecurityApiGatewayRegionalStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/proxy_lambda'),
-            timeout=Duration.seconds(10),
+            timeout=Duration.seconds(29),
             role=well_known_proxy_role,  # Use the fixed role
             environment={
                 'TARGET_ACCOUNT_ID': production_account,

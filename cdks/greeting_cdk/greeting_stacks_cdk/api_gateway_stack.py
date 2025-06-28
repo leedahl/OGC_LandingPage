@@ -56,7 +56,7 @@ class MyApiGatewayStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/proxy_lambda'),
-            timeout=Duration.seconds(10),
+            timeout=Duration.seconds(29),
             role=authorizer_proxy_role,  # Use the fixed role
             environment = {
                 'TARGET_ACCOUNT_ID': security_account,
@@ -80,7 +80,8 @@ class MyApiGatewayStack(Stack):
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.greeting.greeting_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/greeting_lambda')
+            code=aws_lambda.Code.from_asset('../../src/greeting_lambda'),
+            timeout=Duration.seconds(29)
         )
 
         # Configure CloudWatch logs with 7-day retention policy
@@ -118,7 +119,7 @@ class MyApiGatewayStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/proxy_lambda'),
-            timeout=Duration.seconds(10),
+            timeout=Duration.seconds(29),
             role=well_known_proxy_role,  # Use the fixed role
             environment={
                 'TARGET_ACCOUNT_ID': production_account,
