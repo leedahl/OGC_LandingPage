@@ -18,7 +18,8 @@ from aws_cdk import (
     aws_iam as iam,
     aws_route53 as route53,
     aws_route53_targets as targets,
-    aws_certificatemanager as acm
+    aws_certificatemanager as acm,
+    aws_logs as logs
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
@@ -49,6 +50,13 @@ class SecurityApiGatewayRegionalStack(Stack):
             environment={
                 'key_alias': 'security_user_store_key'
             }
+        )
+
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'AuthorizerLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{authorizer_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
         )
 
         if self.region == 'us-east-2':
@@ -86,6 +94,13 @@ class SecurityApiGatewayRegionalStack(Stack):
             }
         )
 
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'RegisterLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{register_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
+        )
+
         # Create User Management Lambda
         # noinspection PyTypeChecker
         user_management_lambda = aws_lambda.Function(
@@ -99,6 +114,13 @@ class SecurityApiGatewayRegionalStack(Stack):
             environment={
                 'key_alias': 'security_user_store_key'
             }
+        )
+
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'UserManagementLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{user_management_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
         )
 
         # Grant the Register Lambda permission to access DynamoDB
@@ -145,6 +167,13 @@ class SecurityApiGatewayRegionalStack(Stack):
                 'TARGET_FUNCTION_NAME': 'WellKnownLambda',
                 'TARGET_REGION': 'us-east-2'
             }
+        )
+
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'WellKnownProxyLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{well_known_proxy_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
         )
 
         # Create API Gateway

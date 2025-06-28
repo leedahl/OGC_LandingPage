@@ -14,7 +14,8 @@ from aws_cdk import (
     aws_route53 as route53,
     aws_route53_targets as targets,
     Duration,
-    aws_iam as iam
+    aws_iam as iam,
+    aws_logs as logs
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
@@ -64,6 +65,13 @@ class MyApiGatewayStack(Stack):
             }
         )
 
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'AuthorizerLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{authorizer_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
+        )
+
         # Create the Greeting Lambda function
         # noinspection PyTypeChecker
         greeting_lambda = aws_lambda.Function(
@@ -73,6 +81,13 @@ class MyApiGatewayStack(Stack):
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.greeting.greeting_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/greeting_lambda')
+        )
+
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'GreetingLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{greeting_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
         )
 
         # Create a role with a fixed name for the well-known proxy Lambda function
@@ -110,6 +125,13 @@ class MyApiGatewayStack(Stack):
                 'TARGET_FUNCTION_NAME': 'WellKnownLambda',
                 'TARGET_REGION': 'us-east-2'
             }
+        )
+
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'WellKnownProxyLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{well_known_proxy_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
         )
 
         # Create API Gateway

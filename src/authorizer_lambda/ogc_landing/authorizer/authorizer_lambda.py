@@ -182,7 +182,6 @@ def process_authorization(
             return deny_access(_AuthenticationStatus.FORBIDDEN, method_arn, username)
 
     if 'Item' in item_result and 'password' in item_result['Item'] and password_matches and db_password is not None:
-        # noinspection PyUnreachableCode
         match http_method:
             case 'GET':
                 # noinspection PyUnusedLocal

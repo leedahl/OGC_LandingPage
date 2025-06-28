@@ -16,7 +16,9 @@ from aws_cdk import (
     aws_route53_targets as targets,
     Duration,
     RemovalPolicy,
-    aws_iam as iam
+    aws_iam as iam,
+    aws_s3 as s3,
+    aws_logs as logs
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
@@ -173,6 +175,36 @@ class MyApiGatewayStack(Stack):
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
         )
 
+        # Create S3 bucket for logging
+        # noinspection PyTypeChecker
+        logging_bucket = s3.Bucket(
+            self, 'ApiLoggingBucket',
+            bucket_name=f'api-logging-ohio-{self.account}',
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            versioned=True,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            removal_policy=RemovalPolicy.RETAIN,  # Keep the bucket even if the stack is deleted
+            lifecycle_rules=[
+                s3.LifecycleRule(
+                    expiration=Duration.days(7),  # Retain data for only 7 days
+                    enabled=True
+                )
+            ]
+        )
+
+        # Create S3 bucket for API backups
+        # noinspection PyTypeChecker
+        backup_bucket = s3.Bucket(
+            self, 'ApiBackupBucket',
+            bucket_name=f'api-backup-ohio-{self.account}',
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            versioned=True,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            removal_policy=RemovalPolicy.RETAIN,  # Keep the bucket even if the stack is deleted
+            server_access_logs_bucket=logging_bucket,
+            server_access_logs_prefix='api-backup-logs/'
+        )
+
         # Create the well-known Lambda function
         # noinspection PyTypeChecker
         well_known_lambda = aws_lambda.Function(
@@ -183,6 +215,13 @@ class MyApiGatewayStack(Stack):
             handler='ogc_landing.well_known.well_known_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/well_known_lambda'),
             timeout=Duration.seconds(10)
+        )
+
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'WellKnownLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{well_known_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
         )
 
         aws_lambda.CfnPermission(
@@ -246,6 +285,13 @@ class MyApiGatewayStack(Stack):
             timeout=Duration.seconds(10)
         )
 
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'OpenApiLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{openapi_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
+        )
+
         # Grant the WellKnown Lambda permission to access DynamoDB
         api_catalog.grant_read_data(well_known_lambda)
         api_conformance.grant_read_data(well_known_lambda)
@@ -270,6 +316,42 @@ class MyApiGatewayStack(Stack):
         openapi_components.grant_read_write_data(openapi_lambda)
         openapi_tags.grant_read_write_data(openapi_lambda)
         openapi_security_schemes.grant_read_write_data(openapi_lambda)
+
+        # Create the Backup Lambda function
+        # noinspection PyTypeChecker
+        backup_lambda = aws_lambda.Function(
+            self, 'APIBackupLambda',
+            function_name='APIBackupLambda',  # Custom name without stack prefix or random suffix
+            runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
+            handler='ogc_landing.backup.backup_lambda.lambda_handler',
+            code=aws_lambda.Code.from_asset('../../src/backup_lambda'),
+            timeout=Duration.seconds(60),  # Longer timeout for backup operations
+            environment={
+                'BACKUP_BUCKET_NAME': backup_bucket.bucket_name
+            }
+        )
+
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'BackupLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{backup_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
+        )
+
+        # Grant the Backup Lambda permission to access DynamoDB tables
+        api_catalog.grant_read_data(backup_lambda)
+        api_conformance.grant_read_data(backup_lambda)
+        openapi_documents.grant_read_data(backup_lambda)
+        openapi_servers.grant_read_data(backup_lambda)
+        openapi_paths.grant_read_data(backup_lambda)
+        openapi_operations.grant_read_data(backup_lambda)
+        openapi_components.grant_read_data(backup_lambda)
+        openapi_tags.grant_read_data(backup_lambda)
+        openapi_security_schemes.grant_read_data(backup_lambda)
+
+        # Grant the Backup Lambda permission to read and write to the S3 bucket
+        backup_bucket.grant_read_write(backup_lambda)
 
         # Create a role with a fixed name for the well-known proxy Lambda function
         authorizer_proxy_role = iam.Role(
@@ -308,6 +390,13 @@ class MyApiGatewayStack(Stack):
             }
         )
 
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'AuthorizerLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{authorizer_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
+        )
+
         # Create API Gateway
         api = api_gateway.RestApi(
             self, 'MyApis',
@@ -342,6 +431,15 @@ class MyApiGatewayStack(Stack):
         conformance_alias_resource = conformance_resource.add_resource('{conformance_alias}')
         api_resource = api.root.add_resource('api')
         documentation_resource = api.root.add_resource('documentation')
+
+        # Create data_management resource and sub-resources
+        data_management_resource = api.root.add_resource('data_management')
+        backup_resource = data_management_resource.add_resource('backup')
+        restore_resource = data_management_resource.add_resource('restore')
+        restore_id_resource = restore_resource.add_resource('{backup_id}')
+        delete_resource = data_management_resource.add_resource('delete')
+        delete_id_resource = delete_resource.add_resource('{backup_id}')
+        list_resource = data_management_resource.add_resource('list')
 
         # Create OpenAPI resources
         openapi_resource = api_resource.add_resource('openapi')
@@ -433,6 +531,66 @@ class MyApiGatewayStack(Stack):
             api_gateway.LambdaIntegration(
                 openapi_lambda,
                 timeout=Duration.seconds(10)  # Set timeout to 10 seconds
+            ),
+            authorizer=authorizer,
+            authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add POST method to trigger backup
+        # noinspection PyTypeChecker
+        backup_resource.add_method(
+            'POST',
+            api_gateway.LambdaIntegration(
+                backup_lambda,
+                timeout=Duration.seconds(60)  # Set timeout to 60 seconds for backup operations
+            ),
+            authorizer=authorizer,
+            authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add POST method to restore backup (default to most recent)
+        # noinspection PyTypeChecker
+        restore_resource.add_method(
+            'POST',
+            api_gateway.LambdaIntegration(
+                backup_lambda,
+                timeout=Duration.seconds(60)  # Set timeout to 60 seconds for restore operations
+            ),
+            authorizer=authorizer,
+            authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add POST method to restore specific backup by ID
+        # noinspection PyTypeChecker
+        restore_id_resource.add_method(
+            'POST',
+            api_gateway.LambdaIntegration(
+                backup_lambda,
+                timeout=Duration.seconds(60)  # Set timeout to 60 seconds for restore operations
+            ),
+            authorizer=authorizer,
+            authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add DELETE method to delete specific backup by ID
+        # noinspection PyTypeChecker
+        delete_id_resource.add_method(
+            'DELETE',
+            api_gateway.LambdaIntegration(
+                backup_lambda,
+                timeout=Duration.seconds(60)  # Set timeout to 60 seconds for delete operations
+            ),
+            authorizer=authorizer,
+            authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add GET method to list all backups
+        # noinspection PyTypeChecker
+        list_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(
+                backup_lambda,
+                timeout=Duration.seconds(30)  # Set timeout to 30 seconds for list operations
             ),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,

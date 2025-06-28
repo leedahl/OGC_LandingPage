@@ -18,7 +18,8 @@ from aws_cdk import (
     aws_route53 as route53,
     aws_route53_targets as targets,
     aws_certificatemanager as acm,
-    aws_kms as kms
+    aws_kms as kms,
+    aws_logs as logs
 )
 from aws_cdk.aws_apigateway import ResponseType
 from aws_cdk.aws_iam import PolicyStatement
@@ -111,6 +112,13 @@ class CARegionalApiGatewayStack(Stack):
                 'CERTIFICATE_METADATA_TABLE': self.certificate_metadata_table.table_name,
                 'KEY_ALIAS': 'ca_key'
             }
+        )
+
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'CSRLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{csr_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
         )
 
         # Create API Gateway
