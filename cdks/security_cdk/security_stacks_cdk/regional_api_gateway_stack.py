@@ -60,20 +60,21 @@ class SecurityApiGatewayRegionalStack(Stack):
             retention=logs.RetentionDays.ONE_WEEK
         )
 
-        if region_name == 'Ohio':
-            aws_lambda.CfnPermission(
-                self, 'GreetingAuthorizerProxyLambdaInvokeAccess',
-                action='lambda:InvokeFunction',
-                function_name=authorizer_lambda.function_arn,
-                principal=f'arn:aws:iam::{production_account}:role/GreetingAuthorizerProxyLambdaRole'
-            )
+        # Grant permission for the GreetingAuthorizerProxyLambda to invoke this Lambda
+        # aws_lambda.CfnPermission(
+        #     self, 'GreetingAuthorizerProxyLambdaInvokeAccess',
+        #     action='lambda:InvokeFunction',
+        #     function_name=authorizer_lambda.function_arn,
+        #     principal=f'arn:aws:iam::{production_account}:role/GreetingAuthorizerProxyLambdaRole'
+        # )
 
-            aws_lambda.CfnPermission(
-                self, 'APIAuthorizerProxyLambdaInvokeAccess',
-                action='lambda:InvokeFunction',
-                function_name=authorizer_lambda.function_arn,
-                principal=f'arn:aws:iam::{production_account}:role/APIAuthorizerProxyLambdaRole'
-            )
+        # Grant permission for the APIAuthorizerProxyLambda to invoke this Lambda
+        aws_lambda.CfnPermission(
+            self, 'APIAuthorizerProxyLambdaInvokeAccess',
+            action='lambda:InvokeFunction',
+            function_name=authorizer_lambda.function_arn,
+            principal=f'arn:aws:iam::{production_account}:role/APIAuthorizerProxy{region_name}LambdaRole'
+        )
 
         # Grant the Authorizer Lambda permissions to access DynamoDB and KMS
         self.user_table.grant_read_data(authorizer_lambda)
