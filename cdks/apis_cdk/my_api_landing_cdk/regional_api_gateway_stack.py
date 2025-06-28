@@ -188,15 +188,15 @@ class ApiGatewayRegionalStack(Stack):
         )
 
         # Grant the Backup Lambda permission to access DynamoDB tables
-        self.api_catalog.grant_read_data(backup_lambda)
-        self.api_conformance.grant_read_data(backup_lambda)
-        self.openapi_documents.grant_read_data(backup_lambda)
-        self.openapi_servers.grant_read_data(backup_lambda)
-        self.openapi_paths.grant_read_data(backup_lambda)
-        self.openapi_operations.grant_read_data(backup_lambda)
-        self.openapi_components.grant_read_data(backup_lambda)
-        self.openapi_tags.grant_read_data(backup_lambda)
-        self.openapi_security_schemes.grant_read_data(backup_lambda)
+        self.api_catalog.grant_read_write_data(backup_lambda)
+        self.api_conformance.grant_read_write_data(backup_lambda)
+        self.openapi_documents.grant_read_write_data(backup_lambda)
+        self.openapi_servers.grant_read_write_data(backup_lambda)
+        self.openapi_paths.grant_read_write_data(backup_lambda)
+        self.openapi_operations.grant_read_write_data(backup_lambda)
+        self.openapi_components.grant_read_write_data(backup_lambda)
+        self.openapi_tags.grant_read_write_data(backup_lambda)
+        self.openapi_security_schemes.grant_read_write_data(backup_lambda)
 
         # Grant the Backup Lambda permission to read and write to the S3 bucket
         backup_bucket.grant_read_write(backup_lambda)
