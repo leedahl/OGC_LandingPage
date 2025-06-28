@@ -134,6 +134,7 @@ class SecurityApiGatewayRegionalStack(Stack):
         self.kms_key.grant_encrypt_decrypt(user_management_lambda)
 
         # Create a role with a fixed name for the well-known proxy Lambda function
+        # noinspection SpellCheckingInspection
         well_known_proxy_role = iam.Role(
             self, 'WellKnownProxyRole',
             role_name=f'WellKnownProxyLambda{region_name}Role',
@@ -147,7 +148,7 @@ class SecurityApiGatewayRegionalStack(Stack):
         well_known_proxy_role.add_to_policy(
             iam.PolicyStatement(
                 actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:us-east-2:{production_account}:function:WellKnownLambda'],
+                resources=[f'arn:aws:lambda:{self.region}:{production_account}:function:WellKnown{region_name}Lambda'],
                 effect=iam.Effect.ALLOW
             )
         )
@@ -165,8 +166,8 @@ class SecurityApiGatewayRegionalStack(Stack):
             role=well_known_proxy_role,  # Use the fixed role
             environment={
                 'TARGET_ACCOUNT_ID': production_account,
-                'TARGET_FUNCTION_NAME': 'WellKnownLambda',
-                'TARGET_REGION': 'us-east-2'
+                'TARGET_FUNCTION_NAME': f'WellKnown{region_name}Lambda',
+                'TARGET_REGION': self.region
             }
         )
 
@@ -197,6 +198,7 @@ class SecurityApiGatewayRegionalStack(Stack):
             domain_name='security.i7es.click',
             validation=acm.CertificateValidation.from_dns(hosted_zone)
         )
+
         # Create custom domain name for API Gateway
         # noinspection PyTypeChecker
         domain_name = api_gateway.DomainName(

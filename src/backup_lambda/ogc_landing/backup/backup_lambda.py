@@ -7,6 +7,16 @@ import json
 from typing import Dict, Any, List, Optional
 
 
+def get_ohio_s3_client():
+    """
+    Returns an S3 client configured for the Ohio region (us-east-2).
+
+    Returns:
+        An S3 client for the Ohio region.
+    """
+    return boto3.client('s3', region_name='us-east-2')
+
+
 def create_problem_response(status: int, detail: str, type_uri: str = "about:blank", 
                            title: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -85,7 +95,7 @@ def create_backup() -> Dict[str, Any]:
 
         # Initialize DynamoDB and S3 clients
         dynamodb = boto3.resource('dynamodb')
-        s3 = boto3.client('s3')
+        s3 = get_ohio_s3_client()
 
         # Get the S3 bucket name from environment variable
         bucket_name = os.environ.get('BACKUP_BUCKET_NAME')
@@ -156,8 +166,8 @@ def list_backups() -> Dict[str, Any]:
         A response dict containing status and information about the backups.
     """
     try:
-        # Initialize S3 client
-        s3 = boto3.client('s3')
+        # Initialize S3 client for Ohio region
+        s3 = get_ohio_s3_client()
 
         # Get the S3 bucket name from environment variable
         bucket_name = os.environ.get('BACKUP_BUCKET_NAME')
@@ -216,8 +226,8 @@ def get_most_recent_backup() -> Optional[str]:
         The most recent backup prefix or None if no backups exist.
     """
     try:
-        # Initialize S3 client
-        s3 = boto3.client('s3')
+        # Initialize S3 client for Ohio region
+        s3 = get_ohio_s3_client()
 
         # Get the S3 bucket name from environment variable
         bucket_name = os.environ.get('BACKUP_BUCKET_NAME')
@@ -255,8 +265,8 @@ def delete_backup(backup_id: str) -> Dict[str, Any]:
         A response dict containing status and information about the delete operation.
     """
     try:
-        # Initialize S3 client
-        s3 = boto3.client('s3')
+        # Initialize S3 client for Ohio region
+        s3 = get_ohio_s3_client()
 
         # Get the S3 bucket name from environment variable
         bucket_name = os.environ.get('BACKUP_BUCKET_NAME')
@@ -321,7 +331,7 @@ def restore_backup(backup_id: Optional[str] = None) -> Dict[str, Any]:
     try:
         # Initialize DynamoDB and S3 clients
         dynamodb = boto3.resource('dynamodb')
-        s3 = boto3.client('s3')
+        s3 = get_ohio_s3_client()
 
         # Get the S3 bucket name from environment variable
         bucket_name = os.environ.get('BACKUP_BUCKET_NAME')
