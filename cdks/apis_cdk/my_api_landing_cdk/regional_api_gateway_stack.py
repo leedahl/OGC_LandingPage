@@ -420,7 +420,7 @@ class ApiGatewayRegionalStack(Stack):
         # Add Post method with backup endpoint.
         # noinspection PyTypeChecker
         backup_resource.add_method(
-            'POST',
+            'PUT',
             api_gateway.LambdaIntegration(backup_lambda),
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
             authorizer=authorizer
@@ -429,7 +429,7 @@ class ApiGatewayRegionalStack(Stack):
         # Add Get method with restore endpoint.
         # noinspection PyTypeChecker
         restore_resource.add_method(
-            'GET',
+            'PUT',
             api_gateway.LambdaIntegration(backup_lambda),
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
             authorizer=authorizer
@@ -438,7 +438,7 @@ class ApiGatewayRegionalStack(Stack):
         # Add Post method with restore ID endpoint.
         # noinspection PyTypeChecker
         restore_id_resource.add_method(
-            'POST',
+            'PUT',
             api_gateway.LambdaIntegration(backup_lambda),
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
             authorizer=authorizer

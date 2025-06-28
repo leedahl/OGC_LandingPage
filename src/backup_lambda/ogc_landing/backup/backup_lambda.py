@@ -189,14 +189,10 @@ def list_backups() -> Dict[str, Any]:
                 match = re.match(r'backup/(\d{8}T\d{6})/', prefix_path)
                 if match:
                     timestamp = match.group(1)
-                    prefixes.append({
-                        'id': timestamp,
-                        'prefix': prefix_path,
-                        'timestamp': timestamp
-                    })
+                    prefixes.append(timestamp)
 
         # Sort prefixes by timestamp (newest first)
-        prefixes.sort(key=lambda x: x['timestamp'], reverse=True)
+        prefixes.sort(reverse=True)
 
         # Return success response
         return {

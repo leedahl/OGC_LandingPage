@@ -187,14 +187,19 @@ def process_authorization(
                 # noinspection PyUnusedLocal
                 request_valid = True
 
+            case 'PUT':
+                # noinspection PyUnusedLocal
+                request_valid = (
+                    'data_management/backup' in method_arn or
+                    'data_management/restore' in method_arn
+                )
+
             case 'POST':
                 # noinspection PyUnusedLocal
                 request_valid = (
                         'user-management' in method_arn or
                         'openapi' in method_arn or
-                        'csr' in method_arn or
-                        'data_management/backup' in method_arn or
-                        'data_management/restore' in method_arn
+                        'csr' in method_arn
                 )
 
             case 'DELETE':
