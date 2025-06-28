@@ -60,7 +60,7 @@ class SecurityApiGatewayRegionalStack(Stack):
             retention=logs.RetentionDays.ONE_WEEK
         )
 
-        if self.region == 'us-east-2':
+        if region_name == 'Ohio':
             aws_lambda.CfnPermission(
                 self, 'GreetingAuthorizerProxyLambdaInvokeAccess',
                 action='lambda:InvokeFunction',

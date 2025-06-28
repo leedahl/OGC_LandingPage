@@ -363,11 +363,11 @@ class MyApiGatewayStack(Stack):
             ]
         )
 
-        # Grant the well-known proxy Lambda permission to invoke the well-known Lambda in the other account
+        # Grant the authorizer proxy Lambda permission to invoke the authorizer Lambda in the security account
         authorizer_proxy_role.add_to_policy(
             iam.PolicyStatement(
                 actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:us-east-2:{security_account}:function:AuthorizerLambda'],
+                resources=[f'arn:aws:lambda:us-east-2:{security_account}:function:AuthorizerOhioLambda'],
                 effect=iam.Effect.ALLOW
             )
         )
@@ -385,7 +385,7 @@ class MyApiGatewayStack(Stack):
             role=authorizer_proxy_role,  # Use the fixed role
             environment={
                 'TARGET_ACCOUNT_ID': security_account,
-                'TARGET_FUNCTION_NAME': 'AuthorizerLambda',
+                'TARGET_FUNCTION_NAME': 'AuthorizerOhioLambda',
                 'TARGET_REGION': 'us-east-2'
             }
         )
