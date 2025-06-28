@@ -7,6 +7,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
 from aws_cdk import (
     Stack,
     aws_apigateway as api_gateway,
@@ -15,53 +16,54 @@ from aws_cdk import (
     aws_route53_targets as targets,
     Duration,
     aws_iam as iam,
-    aws_logs as logs
+    aws_logs as logs,
+    aws_certificatemanager as acm
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
 
 
-class MyApiGatewayStack(Stack):
+class GreetingApiGatewayRegionalStack(Stack):
     def __init__(
-            self, scope: Construct, construct_id: str, certificate_stack: Stack, security_account: str,
-            production_account: str, **kwargs
+            self, scope: Construct, construct_id: str, security_account: str, region_name: str, **kwargs
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Create a role with a fixed name for the well-known proxy Lambda function
+        # Create a role with a region-specific name for the authorizer proxy Lambda function
         authorizer_proxy_role = iam.Role(
             self, 'GreetingAuthorizerProxyRole',
-            role_name='GreetingAuthorizerProxyLambdaRole',  # Fixed name without stack prefix or random suffix
+            role_name=f'GreetingAuthorizerProxy{region_name}Role',  # Region-specific name matching what's expected in security_cdk
             assumed_by=iam.ServicePrincipal('lambda.amazonaws.com'),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole')
             ]
         )
 
-        # Grant the well-known proxy Lambda permission to invoke the well-known Lambda in the other account
+        # Grant the authorizer proxy Lambda permission to invoke the Authorizer Lambda in the security account
+        # in the same region
         authorizer_proxy_role.add_to_policy(
             iam.PolicyStatement(
                 actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:us-east-2:{security_account}:function:AuthorizerOhioLambda'],
+                resources=[f'arn:aws:lambda:{self.region}:{security_account}:function:Authorizer{region_name}Lambda'],
                 effect=iam.Effect.ALLOW
             )
         )
 
-        # Create the Authorizer Lambda function
+        # Create the Authorizer Lambda function with region-specific name
         # noinspection PyTypeChecker
         authorizer_lambda = aws_lambda.Function(
             self, 'AuthorizerProxyLambda',
-            function_name='AuthorizerProxyLambda',  # Custom name without stack prefix or random suffix
+            function_name=f'AuthorizerProxy{region_name}Lambda',  # Region-specific name
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
             code=aws_lambda.Code.from_asset('../../src/proxy_lambda'),
             timeout=Duration.seconds(29),
-            role=authorizer_proxy_role,  # Use the fixed role
+            role=authorizer_proxy_role,  # Use the region-specific role
             environment = {
                 'TARGET_ACCOUNT_ID': security_account,
-                'TARGET_FUNCTION_NAME': 'AuthorizerOhioLambda',
-                'TARGET_REGION': 'us-east-2'
+                'TARGET_FUNCTION_NAME': f'Authorizer{region_name}Lambda',
+                'TARGET_REGION': self.region
             }
         )
 
@@ -72,11 +74,11 @@ class MyApiGatewayStack(Stack):
             retention=logs.RetentionDays.ONE_WEEK
         )
 
-        # Create the Greeting Lambda function
+        # Create the Greeting Lambda function with region-specific name
         # noinspection PyTypeChecker
         greeting_lambda = aws_lambda.Function(
             self, 'GreetingLambda',
-            function_name='GreetingLambda',  # Custom name without stack prefix or random suffix
+            function_name=f'Greeting{region_name}Lambda',  # Region-specific name
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.greeting.greeting_lambda.lambda_handler',
@@ -91,55 +93,25 @@ class MyApiGatewayStack(Stack):
             retention=logs.RetentionDays.ONE_WEEK
         )
 
-        # Create a role with a fixed name for the well-known proxy Lambda function
-        well_known_proxy_role = iam.Role(
-            self, 'WellKnownProxyRole',
-            role_name='WellKnownProxyLambdaRole',  # Fixed name without stack prefix or random suffix
-            assumed_by=iam.ServicePrincipal('lambda.amazonaws.com'),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole')
-            ]
+        # Create custom domain name and Route53 record
+        # Look up the hosted zone
+        hosted_zone = route53.HostedZone.from_lookup(
+            self, 'HostedZone',
+            domain_name='greeting.i7es.click'
         )
 
-        # Grant the well-known proxy Lambda permission to invoke the well-known Lambda in the other account
-        well_known_proxy_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:us-east-2:{production_account}:function:WellKnownLambda'],
-                effect=iam.Effect.ALLOW
-            )
-        )
-
-        # Create the well-known proxy Lambda function
-        # noinspection PyTypeChecker
-        well_known_proxy_lambda = aws_lambda.Function(
-            self, 'WellKnownProxyLambda',
-            function_name='WellKnownProxyLambda',  # Custom name without stack prefix or random suffix
-            runtime=aws_lambda.Runtime.PYTHON_3_12,
-            architecture=aws_lambda.Architecture.ARM_64,
-            handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/proxy_lambda'),
-            timeout=Duration.seconds(29),
-            role=well_known_proxy_role,  # Use the fixed role
-            environment={
-                'TARGET_ACCOUNT_ID': production_account,
-                'TARGET_FUNCTION_NAME': 'WellKnownLambda',
-                'TARGET_REGION': 'us-east-2'
-            }
-        )
-
-        # Configure CloudWatch logs with 7-day retention policy
-        logs.LogRetention(
-            self, 'WellKnownProxyLambdaLogRetention',
-            log_group_name=f'/aws/lambda/{well_known_proxy_lambda.function_name}',
-            retention=logs.RetentionDays.ONE_WEEK
+        # Create ACM certificate for the domain
+        self.certificate = acm.Certificate(
+            self, 'GreetingCertificate',
+            domain_name='greeting.i7es.click',
+            validation=acm.CertificateValidation.from_dns(hosted_zone)
         )
 
         # Create API Gateway
         api = api_gateway.RestApi(
             self, 'GreetingApi',
-            rest_api_name='Greeting API',
-            description='Personalized Greeting API.',
+            rest_api_name=f'Greeting {region_name} API',
+            description=f'Personalized Greeting API for {region_name} region.',
         )
 
         # Configure 401 Gateway Response to include WWW-Authenticate header
@@ -175,43 +147,47 @@ class MyApiGatewayStack(Stack):
         conformance_resource = api.root.add_resource('conformance')
         conformance_name_resource = conformance_resource.add_resource('{conformance_alias}')
 
-        # Add GET method to the well-known endpoint
+        well_known_lambda = aws_lambda.Function.from_function_name(
+            self, 'GreetingWellKnownLambda', f'WellKnown{region_name}Lambda'
+        )
+
+        # Add GET method to the index endpoint
         # noinspection PyTypeChecker
         index_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
-        # Add GET method to the well-known endpoint
+        # Add GET method to the basic authentication endpoint
         # noinspection PyTypeChecker
         basic_authentication_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
-        # Add GET method to the well-known endpoint
+        # Add GET method to the basic authentication issues endpoint
         # noinspection PyTypeChecker
         basic_authentication_issues_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
-        # Add GET method to the well-known endpoint
+        # Add GET method to the describing security controls endpoint
         # noinspection PyTypeChecker
         describe_security_controls_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
-        # Add GET method to the well-known endpoint
+        # Add GET method to the root endpoint
         # noinspection PyTypeChecker
         api.root.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -237,54 +213,48 @@ class MyApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         well_known_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
-        # Add GET method to the well-known endpoint
+        # Add GET method to the well-known name endpoint
         # noinspection PyTypeChecker
         well_known_name_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
-        # Add GET method to the well-known endpoint
+        # Add GET method to the api endpoint
         # noinspection PyTypeChecker
         api_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
-       # Add GET method to the well-known endpoint
+        # Add GET method to the documentation endpoint
         # noinspection PyTypeChecker
         documentation_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
-        # Add GET method to the well-known endpoint
+        # Add GET method to the conformance endpoint
         # noinspection PyTypeChecker
         conformance_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
-        # Add GET method to the well-known endpoint
+        # Add GET method to the conformance name endpoint
         # noinspection PyTypeChecker
         conformance_name_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_proxy_lambda),
+            api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
-        )
-
-        # Look up the hosted zone name
-        hosted_zone = route53.HostedZone.from_lookup(
-            self, 'HostedZone',
-            domain_name='greeting.i7es.click'
         )
 
         # Create custom domain for API Gateway
@@ -292,8 +262,9 @@ class MyApiGatewayStack(Stack):
         domain = api_gateway.DomainName(
             self, 'GreetingDomain',
             domain_name='greeting.i7es.click',
-            certificate=certificate_stack.certificate,
-            endpoint_type=api_gateway.EndpointType.EDGE
+            certificate=self.certificate,
+            endpoint_type=api_gateway.EndpointType.REGIONAL,
+            security_policy = api_gateway.SecurityPolicy.TLS_1_2
         )
 
         # Map the custom domain to the API
@@ -301,10 +272,21 @@ class MyApiGatewayStack(Stack):
 
         # Create DNS record to point to the API Gateway domain
         route53.ARecord(
-            self, 'GreetingApiGatewayAliasRecord',
+            self, 'GreetingApiGatewayAliasRecordA',
             zone=hosted_zone,
             record_name='',
             target=route53.RecordTarget.from_alias(
                 targets.ApiGatewayDomain(domain)
-            )
+            ),
+            region=self.region
+        )
+
+        route53.AaaaRecord(
+            self, 'GreetingApiGatewayAliasRecordAaaa',
+            zone=hosted_zone,
+            record_name='',
+            target=route53.RecordTarget.from_alias(
+                targets.ApiGatewayDomain(domain)
+            ),
+            region=self.region
         )

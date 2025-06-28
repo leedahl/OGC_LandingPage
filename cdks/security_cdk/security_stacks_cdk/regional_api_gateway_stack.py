@@ -61,12 +61,12 @@ class SecurityApiGatewayRegionalStack(Stack):
         )
 
         # Grant permission for the GreetingAuthorizerProxyLambda to invoke this Lambda
-        # aws_lambda.CfnPermission(
-        #     self, 'GreetingAuthorizerProxyLambdaInvokeAccess',
-        #     action='lambda:InvokeFunction',
-        #     function_name=authorizer_lambda.function_arn,
-        #     principal=f'arn:aws:iam::{production_account}:role/GreetingAuthorizerProxyLambdaRole'
-        # )
+        aws_lambda.CfnPermission(
+            self, 'GreetingAuthorizerProxyLambdaInvokeAccess',
+            action='lambda:InvokeFunction',
+            function_name=authorizer_lambda.function_arn,
+            principal=f'arn:aws:iam::{production_account}:role/GreetingAuthorizerProxyLambdaRole'
+        )
 
         # Grant permission for the APIAuthorizerProxyLambda to invoke this Lambda
         aws_lambda.CfnPermission(

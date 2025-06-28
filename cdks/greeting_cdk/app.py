@@ -10,32 +10,41 @@
 # SOFTWARE.
 from aws_cdk import App, Environment
 from os import environ
-from greeting_stacks_cdk.api_gateway_stack import MyApiGatewayStack
-from greeting_stacks_cdk.api_gateway_stack_us_east_1 import MyCertificateStack
+from greeting_stacks_cdk.regional_api_gateway_stack import GreetingApiGatewayRegionalStack
+
+# Define regions for CloudFront PRICE_CLASS_100 (North America and Europe)
+regions = {
+    "us-east-1": 'Virginia',
+    "us-east-2": 'Ohio',
+    "us-west-1": 'NorthCalifornia',
+    "us-west-2": 'Oregon',
+    "eu-west-1": 'Ireland',
+    "eu-central-1": 'Frankfurt'
+}
 
 app = App()
 
 deploy_account = environ.get('PRODUCTION_ACCOUNT')
 security_account = environ.get('SECURITY_ACCOUNT')
 
-# Define the environment for deployment of Certificates
-env_us_east_1 = Environment(account=deploy_account, region="us-east-1")
+# Define the primary region for the API Gateway stack
+primary_region = "us-east-2"
 
-# Create Certificates
-cert_stack = MyCertificateStack(
-    app, "GreetingCertificateStack", cross_region_references=True, env=env_us_east_1
-)
+# Define the environment for deployment of the main stack
+env_primary = Environment(account=deploy_account, region=primary_region)
 
-# Define the environment for deployment of APIs
-env = Environment(account=deploy_account, region="us-east-2")
+# Create regional API Gateway stacks in each region
+for region, region_name in regions.items():
+    # Define the environment for the regional stack
+    env_region = Environment(account=deploy_account, region=region)
 
-# Create the API Gateway stack
-api_gateway_stack = MyApiGatewayStack(
-    app, "GreetingApiStack", cross_region_references=True, certificate_stack=cert_stack,
-    security_account=security_account, production_account=deploy_account, env=env
-)
-
-# Add dependency to ensure certificate stack is created first
-api_gateway_stack.add_dependency(cert_stack)
+    # Create the regional API Gateway stack
+    regional_stack = GreetingApiGatewayRegionalStack(
+        app, f"GreetingApiGateway{region_name}Stack",
+        security_account=security_account,
+        region_name=region_name,
+        cross_region_references=True,
+        env=env_region
+    )
 
 app.synth()
