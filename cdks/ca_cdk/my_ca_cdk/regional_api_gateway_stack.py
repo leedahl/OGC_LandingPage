@@ -1,5 +1,5 @@
 # Copyright (c) 2025
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -39,7 +39,6 @@ class CARegionalApiGatewayStack(Stack):
         self.certificate_store_table = certificate_store_table
         self.certificate_metadata_table = certificate_metadata_table
         self.primary_kms_key = primary_kms_key
-
 
         # Create the CSR Lambda function
         # noinspection SpellCheckingInspection

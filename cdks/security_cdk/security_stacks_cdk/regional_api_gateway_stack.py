@@ -60,22 +60,6 @@ class SecurityApiGatewayRegionalStack(Stack):
             retention=logs.RetentionDays.ONE_WEEK
         )
 
-        # Grant permission for the GreetingAuthorizerProxyLambda to invoke this Lambda
-        aws_lambda.CfnPermission(
-            self, 'GreetingAuthorizerProxyLambdaInvokeAccess',
-            action='lambda:InvokeFunction',
-            function_name=authorizer_lambda.function_arn,
-            principal=f'arn:aws:iam::{production_account}:role/GreetingAuthorizerProxyLambdaRole'
-        )
-
-        # Grant permission for the APIAuthorizerProxyLambda to invoke this Lambda
-        aws_lambda.CfnPermission(
-            self, 'APIAuthorizerProxyLambdaInvokeAccess',
-            action='lambda:InvokeFunction',
-            function_name=authorizer_lambda.function_arn,
-            principal=f'arn:aws:iam::{production_account}:role/APIAuthorizerProxy{region_name}LambdaRole'
-        )
-
         # Grant the Authorizer Lambda permissions to access DynamoDB and KMS
         self.user_table.grant_read_data(authorizer_lambda)
         self.api_security_table.grant_read_data(authorizer_lambda)
@@ -266,6 +250,7 @@ class SecurityApiGatewayRegionalStack(Stack):
         documentation_resource = self.api.root.add_resource('documentation')
         register_resource = self.api.root.add_resource('register')
         user_management_resource = self.api.root.add_resource('user-management')
+        decision_resource = self.api.root.add_resource('decision')
 
         # Add Get method with well-known name endpoint.
         # noinspection PyTypeChecker
@@ -375,4 +360,12 @@ class SecurityApiGatewayRegionalStack(Stack):
             api_gateway.LambdaIntegration(user_management_lambda),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add POST method to decision endpoint without an authorizer
+        # noinspection PyTypeChecker
+        decision_resource.add_method(
+            'POST',
+            api_gateway.LambdaIntegration(authorizer_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE,
         )

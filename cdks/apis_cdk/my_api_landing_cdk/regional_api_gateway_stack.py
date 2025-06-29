@@ -20,7 +20,7 @@ from aws_cdk import (
     aws_iam as iam,
     aws_s3 as s3,
     aws_logs as logs,
-    aws_certificatemanager as acm
+    aws_certificatemanager as acm, BundlingOptions
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
@@ -221,22 +221,30 @@ class ApiGatewayRegionalStack(Stack):
             )
         )
 
-        # Create the Authorizer Lambda function with region-specific name
+        # Create the Authorizer Proxy Lambda function with region-specific name
         # noinspection PyTypeChecker
         authorizer_lambda = aws_lambda.Function(
             self, 'APIAuthorizerProxyLambda',
             function_name=f'APIAuthorizerProxy{region_name}Lambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
-            handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/proxy_lambda'),
+            handler='ogc_landing.authorizer_proxy.proxy_lambda.lambda_handler',
+            code = aws_lambda.Code.from_asset(
+                '../../src/authorizer_proxy_lambda',
+                bundling=BundlingOptions(
+                    image=aws_lambda.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash", "-c",
+                        "pip install --no-cache-dir -r requirements.txt -t /asset-output && cp -au . /asset-output"
+                    ],
+                    environment={
+                        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+                        "PIP_NO_CACHE_DIR": "1"
+                    }
+                )
+            ),
             timeout=Duration.seconds(29),
-            role=authorizer_proxy_role,  # Use the fixed role
-            environment={
-                'TARGET_ACCOUNT_ID': security_account,
-                'TARGET_FUNCTION_NAME': f'Authorizer{region_name}Lambda',
-                'TARGET_REGION': self.region
-            }
+            role=authorizer_proxy_role  # Use the fixed role
         )
 
         # Configure CloudWatch logs with 7-day retention policy

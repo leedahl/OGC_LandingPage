@@ -14,6 +14,7 @@ import re
 import boto3
 import os
 import hashlib
+import json
 from enum import Enum
 from typing import Optional
 
@@ -25,12 +26,39 @@ class _AuthenticationStatus(Enum):
 
 # noinspection PyUnusedLocal
 def lambda_handler(event, context):
+    # Check if this is a request from the decision endpoint
+    is_decision_path = False
+    if 'path' in event:
+        is_decision_path = event['path'] == '/decision'
+
+    if (
+            is_decision_path and 
+            'body' in event and 
+            event['body'] is not None
+    ):
+        print('Processing Decision Endpoint Request')
+        try:
+            # Use the body of the request as the event to process
+            body_event = json.loads(event['body'])
+            body_event['isDecisionPath'] = True
+
+            # Process the body event
+            return lambda_handler(body_event, context)
+
+        except json.JSONDecodeError:
+            print('Invalid JSON in request body')
+            return deny_access(
+                _AuthenticationStatus.UNAUTHORIZED, event.get('methodArn', 'unknown'), 
+                is_decision_path=is_decision_path
+            )
+
+    is_decision_path = event.get('isDecisionPath', False)
     if (
             ('requestContext' in event) and ('identity' in event['requestContext'])
             and ('clientCert' in event['requestContext']['identity'])
     ):
         print('Processing Certificate Authorization Request')
-        result = process_cert_authorization(event)
+        result = process_cert_authorization(event, is_decision_path)
 
     elif all([
         event.get('headers', dict()) is not None,
@@ -45,17 +73,18 @@ def lambda_handler(event, context):
                 )
         )
     ]):
-        result = process_header_authorization(event)
+        result = process_header_authorization(event, is_decision_path)
 
     else:
         result = deny_access(
-            _AuthenticationStatus.UNAUTHORIZED, event['methodArn']
+            _AuthenticationStatus.UNAUTHORIZED, event.get('methodArn', 'unknown'),
+            is_decision_path=is_decision_path
         )
 
     return result
 
 
-def process_cert_authorization(event: dict) -> dict:
+def process_cert_authorization(event: dict, is_decision_path: bool = False) -> dict:
     cert = event['requestContext']['identity']['clientCert']
     subject_dn = cert['subjectDN'].split(',')
     subject_map = dict(
@@ -66,10 +95,10 @@ def process_cert_authorization(event: dict) -> dict:
     http_method = event['requestContext']['httpMethod']
     method_arn = event['methodArn']
 
-    return process_authorization(username, password, http_method, method_arn)
+    return process_authorization(username, password, http_method, method_arn, is_decision_path)
 
 
-def process_header_authorization(event: dict) -> dict:
+def process_header_authorization(event: dict, is_decision_path: bool = False) -> dict:
     try:
         authorization_header = 'Authorization' if 'Authorization' in event['headers'] else 'authorization'
         b64_value = event['headers'][authorization_header].replace('Basic ', '')
@@ -87,22 +116,23 @@ def process_header_authorization(event: dict) -> dict:
         method_arn = event['methodArn']
 
         print(f'Processing Authorization Request for {username}.')
-        result = process_authorization(username, password, http_method, method_arn)
+        result = process_authorization(username, password, http_method, method_arn, is_decision_path)
 
     except binascii.Error:
         print({'error': 'Invalid encoding in Authentication header.'})
-        result = deny_access(_AuthenticationStatus.UNAUTHORIZED, event['methodArn'])
+        result = deny_access(_AuthenticationStatus.UNAUTHORIZED, event['methodArn'], is_decision_path=is_decision_path)
 
     except ValueError:
         print({'error': 'Username/password incorrectly mapped within Authentication header.'})
 
-        result = deny_access(_AuthenticationStatus.UNAUTHORIZED, event['methodArn'])
+        result = deny_access(_AuthenticationStatus.UNAUTHORIZED, event['methodArn'], is_decision_path=is_decision_path)
 
     return result
 
 
 def process_authorization(
-        username: str, password: str, http_method: str, method_arn: str
+        username: str, password: str, http_method: str, method_arn: str, 
+        is_decision_path: bool = False
 ) -> dict:
     db_client = boto3.client('dynamodb')
     item_result = db_client.get_item(
@@ -179,7 +209,7 @@ def process_authorization(
 
         if 'Item' not in api_security_result:
             # User doesn't own this API ID
-            return deny_access(_AuthenticationStatus.FORBIDDEN, method_arn, username)
+            return deny_access(_AuthenticationStatus.FORBIDDEN, method_arn, username, is_decision_path=is_decision_path)
 
     if 'Item' in item_result and 'password' in item_result['Item'] and password_matches and db_password is not None:
         match http_method:
@@ -218,20 +248,27 @@ def process_authorization(
 
     if request_valid:
         print(f'The password for {username} matches and an Allow Result is being produced.')
-        result = allow_access(method_arn, username)
+        result = allow_access(method_arn, username, is_decision_path=is_decision_path)
 
     else:
         print(f'The password for {username} does not match an a Deny Result is being produced.')
-        result = deny_access(_AuthenticationStatus.FORBIDDEN, method_arn, username)
+        result = deny_access(_AuthenticationStatus.FORBIDDEN, method_arn, username, is_decision_path=is_decision_path)
 
     return result
 
 
-def deny_access(status: _AuthenticationStatus, method_arn: str, user: Optional[str] = None) -> dict:
-    if status == _AuthenticationStatus.FORBIDDEN:
+def deny_access(status: _AuthenticationStatus, method_arn: str, user: Optional[str] = None, is_decision_path: bool = False) -> dict:
+    if method_arn == 'unknown':
+        # Handle a case where methodArn is not provided
+        response = {
+            "statusCode": 401,
+            "body": status.value
+        }
+
+    elif status == _AuthenticationStatus.FORBIDDEN:
         response = (
-            response_dictionary('Deny', method_arn) if user is None
-            else response_dictionary('Deny', method_arn, user)
+            response_dictionary('Deny', method_arn, is_decision_path=is_decision_path) if user is None
+            else response_dictionary('Deny', method_arn, user, is_decision_path=is_decision_path)
         )
 
     else:
@@ -240,20 +277,49 @@ def deny_access(status: _AuthenticationStatus, method_arn: str, user: Optional[s
             "body": status.value
         }
 
-    print_message = {'user': user} if user is not None else {}
-    print_message.update({'status': status.value, 'resource': method_arn})
+    print_message = {
+        **({'user': user} if user is not None else {}),
+        'status': status.value, 'resource': method_arn
+    }
     print(print_message)
 
-    return response
+    # If this is a decision path request, format the response for API Gateway
+    if is_decision_path:
+        if isinstance(response, dict) and "policyDocument" in response:
+            # This is already a policy document, wrap it in API Gateway format
+            return {
+                "statusCode": 200,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps(response)
+            }
+
+        # Otherwise, it's already formatted for API Gateway
+        return response
+
+    else:
+        # Return the standard response
+        return response
 
 
-def allow_access(method_arn: str, user: str) -> dict:
+def allow_access(method_arn: str, user: str, is_decision_path: bool = False) -> dict:
     print({'user': user, 'action': 'Allow', 'resource': method_arn})
 
-    return response_dictionary('Allow', method_arn, user)
+    response = response_dictionary('Allow', method_arn, user, is_decision_path=is_decision_path)
+
+    # If this is a decision path request, format the response for API Gateway
+    if is_decision_path:
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(response),
+            'isBase64Encoded': False
+        }
+
+    else:
+        return response
 
 
-def response_dictionary(action: str, method_arn: str, user: str = 'user') -> dict:
+def response_dictionary(action: str, method_arn: str, user: str = 'user', is_decision_path: bool = False) -> dict:
     """
     Generates the policy document to return to the API Gateway.  The
     Gateway uses the document to decide if it can invoke lambdas in the API.
@@ -261,6 +327,7 @@ def response_dictionary(action: str, method_arn: str, user: str = 'user') -> dic
     :param action: The action in the policy (Allow or Deny).
     :param method_arn: The ARN for the method to execute.
     :param user: The username to use as the identifier for the principal.
+    :param is_decision_path: Whether this is a request from the decision endpoint.
     """
     method_arn_parts = method_arn.split(':')
     api_parts = method_arn_parts[5].split('/')
