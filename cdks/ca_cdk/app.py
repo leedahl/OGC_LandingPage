@@ -11,8 +11,8 @@
 
 import os
 import aws_cdk as cdk
-from my_ca_cdk.regional_api_gateway_stack import CARegionalApiGatewayStack
-from my_ca_cdk.main_stack import CAMainStack
+from ca_stacks.regional_api_gateway_stack import CARegionalApiGatewayStack
+from ca_stacks.main_stack import CAMainStack
 
 # Get account IDs from environment variables or use defaults
 security_account = os.environ.get('SECURITY_ACCOUNT', '123456789012')

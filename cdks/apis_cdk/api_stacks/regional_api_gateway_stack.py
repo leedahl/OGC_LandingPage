@@ -38,7 +38,6 @@ class ApiGatewayRegionalStack(Stack):
             openapi_components: dynamodb.Table,
             openapi_tags: dynamodb.Table,
             openapi_security_schemes: dynamodb.Table,
-            security_account: str,
             region_name: str,
             **kwargs
     ) -> None:
@@ -111,14 +110,6 @@ class ApiGatewayRegionalStack(Stack):
             self, 'WellKnownLambdaLogRetention',
             log_group_name=f'/aws/lambda/{well_known_lambda.function_name}',
             retention=logs.RetentionDays.ONE_WEEK
-        )
-
-        # Add permissions for the well-known Lambda to be invoked by the security proxy in the same region
-        aws_lambda.CfnPermission(
-            self, f'SecurityProxyLambda{region_name}InvokeAccess',
-            action='lambda:InvokeFunction',
-            function_name=well_known_lambda.function_arn,
-            principal=f'arn:aws:iam::{security_account}:role/WellKnownProxyLambda{region_name}Role'
         )
 
         # Create the OpenAPI Lambda function with region-specific name
@@ -212,15 +203,6 @@ class ApiGatewayRegionalStack(Stack):
             ]
         )
 
-        # Grant the authorizer proxy Lambda permission to invoke the authorizer Lambda in the security account
-        authorizer_proxy_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:{self.region}:{security_account}:function:Authorizer{region_name}Lambda'],
-                effect=iam.Effect.ALLOW
-            )
-        )
-
         # Create the Authorizer Proxy Lambda function with region-specific name
         # noinspection PyTypeChecker
         authorizer_lambda = aws_lambda.Function(
@@ -228,9 +210,9 @@ class ApiGatewayRegionalStack(Stack):
             function_name=f'APIAuthorizerProxy{region_name}Lambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
-            handler='ogc_landing.authorizer_proxy.proxy_lambda.lambda_handler',
+            handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
             code = aws_lambda.Code.from_asset(
-                '../../src/authorizer_proxy_lambda',
+                '../../src/proxy_lambda',
                 bundling=BundlingOptions(
                     image=aws_lambda.Runtime.PYTHON_3_12.bundling_image,
                     command=[
@@ -297,7 +279,7 @@ class ApiGatewayRegionalStack(Stack):
         # Create API resources and methods
         index_resource = api.root.add_resource('index.html')
         well_known_resource = api.root.add_resource('.well-known')
-        well_known_name_resource = well_known_resource.add_resource('{well_known_name}')
+        well_known_api_catalog_resource = well_known_resource.add_resource('api-catalog')
         conformance_resource = api.root.add_resource('conformance')
         conformance_alias_resource = conformance_resource.add_resource('{conformance_alias}')
         api_resource = api.root.add_resource('api')
@@ -350,8 +332,16 @@ class ApiGatewayRegionalStack(Stack):
 
         # Add Get method with well-known name endpoint.
         # noinspection PyTypeChecker
-        well_known_name_resource.add_method(
+        well_known_api_catalog_resource.add_method(
             'GET',
+            api_gateway.LambdaIntegration(well_known_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE,
+        )
+
+        # Add Get method with well-known endpoint.
+        # noinspection PyTypeChecker
+        well_known_api_catalog_resource.add_method(
+            'POST',
             api_gateway.LambdaIntegration(well_known_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE,
         )

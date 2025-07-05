@@ -25,11 +25,12 @@ from constructs import Construct
 
 class GreetingApiGatewayRegionalStack(Stack):
     def __init__(
-            self, scope: Construct, construct_id: str, security_account: str, region_name: str, **kwargs
+            self, scope: Construct, construct_id: str, region_name: str, **kwargs
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         # Create a role with a region-specific name for the authorizer proxy Lambda function
+        # noinspection SpellCheckingInspection
         authorizer_proxy_role = iam.Role(
             self, 'GreetingAuthorizerProxyRole',
             role_name=f'GreetingAuthorizerProxy{region_name}Role',  # Region-specific name matching what's expected in security_cdk
@@ -39,16 +40,6 @@ class GreetingApiGatewayRegionalStack(Stack):
             ]
         )
 
-        # Grant the authorizer proxy Lambda permission to invoke the Authorizer Lambda in the security account
-        # in the same region
-        authorizer_proxy_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:{self.region}:{security_account}:function:Authorizer{region_name}Lambda'],
-                effect=iam.Effect.ALLOW
-            )
-        )
-
         # Create the Authorizer Proxy Lambda function with region-specific name
         # noinspection PyTypeChecker
         authorizer_lambda = aws_lambda.Function(
@@ -56,11 +47,11 @@ class GreetingApiGatewayRegionalStack(Stack):
             function_name=f'AuthorizerProxy{region_name}Lambda',  # Region-specific name
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
-            handler='ogc_landing.authorizer_proxy.proxy_lambda.lambda_handler',
+            handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
             timeout=Duration.seconds(29),
             role=authorizer_proxy_role,  # Use the region-specific role
             code = aws_lambda.Code.from_asset(
-                '../../src/authorizer_proxy_lambda',
+                '../../src/proxy_lambda',
                 bundling=BundlingOptions(
                     image=aws_lambda.Runtime.PYTHON_3_12.bundling_image,
                     command=[
@@ -98,6 +89,50 @@ class GreetingApiGatewayRegionalStack(Stack):
         logs.LogRetention(
             self, 'GreetingLambdaLogRetention',
             log_group_name=f'/aws/lambda/{greeting_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
+        )
+
+        # Create a role with a fixed name for the well-known proxy Lambda function
+        # noinspection SpellCheckingInspection
+        well_known_proxy_role = iam.Role(
+            self, 'WellKnownProxyRole',
+            role_name=f'WellKnownProxyLambda{region_name}Role',
+            assumed_by=iam.ServicePrincipal('lambda.amazonaws.com'),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole')
+            ]
+        )
+
+        # Create the well-known proxy Lambda function
+        # noinspection PyTypeChecker
+        well_known_proxy_lambda = aws_lambda.Function(
+            self, 'GreetingWellKnownProxyLambda',
+            function_name=f'GreetingWellKnownProxy{region_name}Lambda',
+            runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
+            handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
+            code = aws_lambda.Code.from_asset(
+                '../../src/proxy_lambda',
+                bundling=BundlingOptions(
+                    image=aws_lambda.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash", "-c",
+                        "pip install --no-cache-dir -r requirements.txt -t /asset-output && cp -au . /asset-output"
+                    ],
+                    environment={
+                        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+                        "PIP_NO_CACHE_DIR": "1"
+                    }
+                )
+            ),
+            timeout=Duration.seconds(29),
+            role=well_known_proxy_role  # Use the fixed role
+        )
+
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'WellKnownProxyLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{well_known_proxy_lambda.function_name}',
             retention=logs.RetentionDays.ONE_WEEK
         )
 
@@ -149,21 +184,17 @@ class GreetingApiGatewayRegionalStack(Stack):
         greeting_resource = api.root.add_resource('retrieve')
         greeting_name_resource = greeting_resource.add_resource('{name}')
         well_known_resource = api.root.add_resource('.well-known')
-        well_known_name_resource = well_known_resource.add_resource('{well_known_name}')
+        well_known_name_resource = well_known_resource.add_resource('api-catalog')
         api_resource = api.root.add_resource('api')
         documentation_resource = api.root.add_resource('documentation')
         conformance_resource = api.root.add_resource('conformance')
         conformance_name_resource = conformance_resource.add_resource('{conformance_alias}')
 
-        well_known_lambda = aws_lambda.Function.from_function_name(
-            self, 'GreetingWellKnownLambda', f'WellKnown{region_name}Lambda'
-        )
-
         # Add GET method to the index endpoint
         # noinspection PyTypeChecker
         index_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -171,7 +202,7 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         basic_authentication_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -179,7 +210,7 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         basic_authentication_issues_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -187,7 +218,7 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         describe_security_controls_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -195,7 +226,7 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         api.root.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -221,7 +252,7 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         well_known_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -229,7 +260,7 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         well_known_name_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -237,7 +268,7 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         api_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -245,7 +276,7 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         documentation_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -253,7 +284,7 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         conformance_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 
@@ -261,7 +292,7 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         conformance_name_resource.add_method(
             'GET',
-            api_gateway.LambdaIntegration(well_known_lambda),
+            api_gateway.LambdaIntegration(well_known_proxy_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE
         )
 

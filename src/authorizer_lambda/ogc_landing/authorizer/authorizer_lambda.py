@@ -267,8 +267,8 @@ def deny_access(status: _AuthenticationStatus, method_arn: str, user: Optional[s
 
     elif status == _AuthenticationStatus.FORBIDDEN:
         response = (
-            response_dictionary('Deny', method_arn, is_decision_path=is_decision_path) if user is None
-            else response_dictionary('Deny', method_arn, user, is_decision_path=is_decision_path)
+            response_dictionary('Deny', method_arn) if user is None
+            else response_dictionary('Deny', method_arn, user)
         )
 
     else:
@@ -304,7 +304,7 @@ def deny_access(status: _AuthenticationStatus, method_arn: str, user: Optional[s
 def allow_access(method_arn: str, user: str, is_decision_path: bool = False) -> dict:
     print({'user': user, 'action': 'Allow', 'resource': method_arn})
 
-    response = response_dictionary('Allow', method_arn, user, is_decision_path=is_decision_path)
+    response = response_dictionary('Allow', method_arn, user)
 
     # If this is a decision path request, format the response for API Gateway
     if is_decision_path:
@@ -319,7 +319,7 @@ def allow_access(method_arn: str, user: str, is_decision_path: bool = False) -> 
         return response
 
 
-def response_dictionary(action: str, method_arn: str, user: str = 'user', is_decision_path: bool = False) -> dict:
+def response_dictionary(action: str, method_arn: str, user: str = 'user') -> dict:
     """
     Generates the policy document to return to the API Gateway.  The
     Gateway uses the document to decide if it can invoke lambdas in the API.
@@ -327,7 +327,6 @@ def response_dictionary(action: str, method_arn: str, user: str = 'user', is_dec
     :param action: The action in the policy (Allow or Deny).
     :param method_arn: The ARN for the method to execute.
     :param user: The username to use as the identifier for the principal.
-    :param is_decision_path: Whether this is a request from the decision endpoint.
     """
     method_arn_parts = method_arn.split(':')
     api_parts = method_arn_parts[5].split('/')

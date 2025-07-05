@@ -11,8 +11,8 @@
 
 from os import environ
 from aws_cdk import App, Environment
-from my_api_landing_cdk.main_stack import ApiMainStack
-from my_api_landing_cdk.regional_api_gateway_stack import ApiGatewayRegionalStack
+from api_stacks.main_stack import ApiMainStack
+from api_stacks.regional_api_gateway_stack import ApiGatewayRegionalStack
 
 # Define regions for CloudFront PRICE_CLASS_100 (North America and Europe)
 regions = {
@@ -60,7 +60,6 @@ for region, region_name in regions.items():
         openapi_components=main_stack.openapi_components,
         openapi_tags=main_stack.openapi_tags,
         openapi_security_schemes=main_stack.openapi_security_schemes,
-        security_account=security_account,
         region_name=region_name,
         cross_region_references=True,
         env=env_region

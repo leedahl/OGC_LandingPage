@@ -74,7 +74,6 @@ for region, region_name in regions.items():
     # Create the regional API Gateway stack
     regional_stack = SecurityApiGatewayRegionalStack(
         app, f"SecurityApiGateway{region_name}Stack",
-        production_account=production_account,
         user_table=main_stack.user_table,
         api_security_table=main_stack.api_security_table,
         kms_key=kms_key_stack.kms_key,

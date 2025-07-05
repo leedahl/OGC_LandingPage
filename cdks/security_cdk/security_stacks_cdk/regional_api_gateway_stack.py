@@ -19,7 +19,7 @@ from aws_cdk import (
     aws_route53 as route53,
     aws_route53_targets as targets,
     aws_certificatemanager as acm,
-    aws_logs as logs
+    aws_logs as logs, BundlingOptions
 )
 from aws_cdk.aws_apigateway import ResponseType
 from constructs import Construct
@@ -27,7 +27,7 @@ from constructs import Construct
 
 class SecurityApiGatewayRegionalStack(Stack):
     def __init__(
-            self, scope: Construct, construct_id: str, production_account: str,
+            self, scope: Construct, construct_id: str,
             user_table: dynamodb.Table, api_security_table: dynamodb.Table,
             kms_key: kms.Key, region_name: str, **kwargs
     ) -> None:
@@ -129,31 +129,30 @@ class SecurityApiGatewayRegionalStack(Stack):
             ]
         )
 
-        # Grant the well-known proxy Lambda permission to invoke the well-known Lambda in the other account
-        well_known_proxy_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=['lambda:InvokeFunction'],
-                resources=[f'arn:aws:lambda:{self.region}:{production_account}:function:WellKnown{region_name}Lambda'],
-                effect=iam.Effect.ALLOW
-            )
-        )
-
         # Create the well-known proxy Lambda function
         # noinspection PyTypeChecker
         well_known_proxy_lambda = aws_lambda.Function(
-            self, 'WellKnownProxyLambda',
-            function_name=f'WellKnownProxy{region_name}Lambda',
+            self, 'SecurityWellKnownProxyLambda',
+            function_name=f'SecurityWellKnownProxy{region_name}Lambda',
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/proxy_lambda'),
+            code = aws_lambda.Code.from_asset(
+                '../../src/proxy_lambda',
+                bundling=BundlingOptions(
+                    image=aws_lambda.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash", "-c",
+                        "pip install --no-cache-dir -r requirements.txt -t /asset-output && cp -au . /asset-output"
+                    ],
+                    environment={
+                        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+                        "PIP_NO_CACHE_DIR": "1"
+                    }
+                )
+            ),
             timeout=Duration.seconds(29),
-            role=well_known_proxy_role,  # Use the fixed role
-            environment={
-                'TARGET_ACCOUNT_ID': production_account,
-                'TARGET_FUNCTION_NAME': f'WellKnown{region_name}Lambda',
-                'TARGET_REGION': self.region
-            }
+            role=well_known_proxy_role  # Use the fixed role
         )
 
         # Configure CloudWatch logs with 7-day retention policy
@@ -243,7 +242,7 @@ class SecurityApiGatewayRegionalStack(Stack):
         # Create API resources and methods
         index_resource = self.api.root.add_resource('index.html')
         well_known_resource = self.api.root.add_resource('.well-known')
-        well_known_name_resource = well_known_resource.add_resource('{well_known_name}')
+        well_known_name_resource = well_known_resource.add_resource('api-catalog')
         conformance_resource = self.api.root.add_resource('conformance')
         conformance_alias_resource = conformance_resource.add_resource('{conformance_alias}')
         api_resource = self.api.root.add_resource('api')

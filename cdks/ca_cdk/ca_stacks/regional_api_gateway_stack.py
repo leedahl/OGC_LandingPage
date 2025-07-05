@@ -82,6 +82,50 @@ class CARegionalApiGatewayStack(Stack):
 
         self.kms_key.grant_encrypt_decrypt(csr_lambda_role)
 
+        # Create a role with a fixed name for the authorizer proxy Lambda function
+        # noinspection SpellCheckingInspection
+        authorizer_proxy_role = iam.Role(
+            self, 'APIAuthorizerProxyRole',
+            role_name=f'APIAuthorizerProxy{region_name}LambdaRole',
+            assumed_by=iam.ServicePrincipal('lambda.amazonaws.com'),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole')
+            ]
+        )
+
+        # Create the Authorizer Proxy Lambda function with region-specific name
+        # noinspection PyTypeChecker
+        authorizer_lambda = aws_lambda.Function(
+            self, 'APIAuthorizerProxyLambda',
+            function_name=f'APIAuthorizerProxy{region_name}Lambda',
+            runtime=aws_lambda.Runtime.PYTHON_3_12,
+            architecture=aws_lambda.Architecture.ARM_64,
+            handler='ogc_landing.proxy.proxy_lambda.lambda_handler',
+            code = aws_lambda.Code.from_asset(
+                '../../src/proxy_lambda',
+                bundling=BundlingOptions(
+                    image=aws_lambda.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash", "-c",
+                        "pip install --no-cache-dir -r requirements.txt -t /asset-output && cp -au . /asset-output"
+                    ],
+                    environment={
+                        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+                        "PIP_NO_CACHE_DIR": "1"
+                    }
+                )
+            ),
+            timeout=Duration.seconds(29),
+            role=authorizer_proxy_role  # Use the fixed role
+        )
+
+        # Configure CloudWatch logs with 7-day retention policy
+        logs.LogRetention(
+            self, 'AuthorizerLambdaLogRetention',
+            log_group_name=f'/aws/lambda/{authorizer_lambda.function_name}',
+            retention=logs.RetentionDays.ONE_WEEK
+        )
+
         # Create the CSR Lambda function
         # noinspection PyTypeChecker
         csr_lambda = aws_lambda.Function(
@@ -141,9 +185,7 @@ class CARegionalApiGatewayStack(Stack):
         # noinspection PyTypeChecker
         authorizer = api_gateway.RequestAuthorizer(
             self, 'CAAuthorizer',
-            handler=aws_lambda.Function.from_function_name(
-                self,'CAAuthorizerLambda', function_name=f'Authorizer{region_name}Lambda'
-            ),
+            handler=authorizer_lambda,
             identity_sources=[api_gateway.IdentitySource.header('Authorization')],
             results_cache_ttl=Duration.seconds(0)  # Disable caching for testing
         )

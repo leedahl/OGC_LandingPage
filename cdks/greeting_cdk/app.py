@@ -41,7 +41,6 @@ for region, region_name in regions.items():
     # Create the regional API Gateway stack
     regional_stack = GreetingApiGatewayRegionalStack(
         app, f"GreetingApiGateway{region_name}Stack",
-        security_account=security_account,
         region_name=region_name,
         cross_region_references=True,
         env=env_region

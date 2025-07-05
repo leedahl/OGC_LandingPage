@@ -38,7 +38,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     :param context: The context object provided by AWS Lambda
     :return: The response object containing status code, headers, and body
     """
-    print(f'Received Event: {event}')
+    if event.get('httpMethod', 'GET') == 'POST':
+        body = event.get('body', '')
+        result = lambda_handler(json.loads(body), context)
+        print(str(result))
+        return result
 
     original_resource = event.get('resource', '')
     if event.get('resource', '').endswith('.html'):
@@ -50,11 +54,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     headers = event.get('headers', dict()) if event.get('headers', dict()) is not None else dict()
     accept = headers.get('Accept', None) if headers.get('Accept', None) is not None else 'text/html'
+    print(f'Accept: {accept}')
     host = headers.get('Host', None) if headers.get('Host', None) is not None else 'i7es.click'
+    print(f'Host: {host}')
     protocol = (
         headers.get('CloudFront-Forwarded-Proto', None) if headers.get('CloudFront-Forwarded-Proto', None) is not None
         else 'https'
     )
+    print(f'CloudFront-Forwarded-Proto: {protocol}')
 
     dynamodb_client = resource('dynamodb')
     api_methods_table = dynamodb_client.Table('api_catalog')
@@ -73,7 +80,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     items.sort(key=lambda item: item.catalog_order)
 
     match event.get('resource', ''):
-        case '/.well-known/{well_known_name}':
+        case '/.well-known/api-catalog':
             body, content_type, link_header, location_header, status_code = _process_well_known_request(
                 accept, event, host, items, protocol
             )
@@ -913,9 +920,6 @@ def _prepare_well_known_html(items: List[CatalogRecord], protocol: str) -> str:
     })
     domains.sort(key=lambda item: item.catalog_order)
 
-    # Get the first domain to use in navigation
-    first_domain = domains[0].domain if domains else ""
-
     return (
         '<!DOCTYPE html>'
         '<html lang="en">'
@@ -926,7 +930,6 @@ def _prepare_well_known_html(items: List[CatalogRecord], protocol: str) -> str:
         '  header { background-color: #f5f5f5; padding: 10px; }'
         '  nav { background-color: #eee; padding: 10px; }'
         '  .content { padding: 20px; border: 1px solid #ddd; }'
-        '  .hidden { display: none; }'
         '  footer { text-align: center; font-size: 0.8em; color: #666; }'
         '  th.left {text-align: left}'
         '  th, td {padding: 5px}'
@@ -938,15 +941,13 @@ def _prepare_well_known_html(items: List[CatalogRecord], protocol: str) -> str:
         '<header>'
         "<h1>Michael's Portfolio Listing of API Documentation Endpoints</h1>"
         '</header>'
-        '<nav>'
-        f'<a href="{protocol}://{first_domain}/">Home</a> &gt; '
-        f'<a href="{protocol}://{first_domain}/.well-known/api-catalog">API Catalog</a>'
-        '</nav>'
+        '<nav><a href="/">Home</a> &gt; API Catalog</nav>'
         '<section class="content">'
         '<table>'
         f'{''.join([
             '<tr>'
-            f'<th colspan="3" class="left">{domain.title}: {domain.description}</th>'
+            f'<th colspan="3" class="left">'
+            f'<a href="https://{domain.domain}/index.html">{domain.title}</a>: {domain.description}</th>'
             '</tr>'
             f'{''.join([
                 '<tr><td class="top">Service API Documentation</td>'
@@ -977,7 +978,6 @@ def _prepare_well_known_html(items: List[CatalogRecord], protocol: str) -> str:
         '<footer>'
         f'&copy; {current_year} Michael Leedahl'
         '</footer>'
-        '<script>showSection();</script>'
         '</body>'
         '</html>'
     )
@@ -1207,7 +1207,7 @@ def _process_well_known_request(
     :param protocol: The protocol used for the request (http/https).
     :return: A tuple containing (body, content_type, link_header, location_header, status_code).
     """
-    path_parameters = event.get('pathParameters', None)
+    path_parameters = {'well_known_name': event.get('path', '').split('/')[-1]}
     path_parameters = path_parameters if path_parameters is not None else dict()
     match path_parameters['well_known_name']:
         case 'api-catalog':
