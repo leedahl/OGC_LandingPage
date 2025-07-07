@@ -81,7 +81,20 @@ class GreetingApiGatewayRegionalStack(Stack):
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.greeting.greeting_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/greeting_lambda'),
+            code=aws_lambda.Code.from_asset(
+                '../../src/greeting_lambda',
+                bundling=BundlingOptions(
+                    image=aws_lambda.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash", "-c",
+                        "pip install --no-cache-dir -r requirements.txt -t /asset-output && cp -au . /asset-output"
+                    ],
+                    environment={
+                        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+                        "PIP_NO_CACHE_DIR": "1"
+                    }
+                )
+            ),
             timeout=Duration.seconds(29)
         )
 
@@ -243,6 +256,15 @@ class GreetingApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         greeting_resource.add_method(
             'GET',
+            api_gateway.LambdaIntegration(greeting_lambda),
+            authorizer=authorizer,
+            authorization_type=api_gateway.AuthorizationType.CUSTOM,
+        )
+
+        # Add POST method to the retrieve endpoint for GeoJSON processing
+        # noinspection PyTypeChecker
+        greeting_resource.add_method(
+            'POST',
             api_gateway.LambdaIntegration(greeting_lambda),
             authorizer=authorizer,
             authorization_type=api_gateway.AuthorizationType.CUSTOM,

@@ -229,7 +229,8 @@ def process_authorization(
                 request_valid = (
                         'user-management' in method_arn or
                         'openapi' in method_arn or
-                        'csr' in method_arn
+                        'csr' in method_arn or
+                        'retrieve' in method_arn
                 )
 
             case 'DELETE':
@@ -251,7 +252,7 @@ def process_authorization(
         result = allow_access(method_arn, username, is_decision_path=is_decision_path)
 
     else:
-        print(f'The password for {username} does not match an a Deny Result is being produced.')
+        print(f'The password for {username} does not match and a Deny Result is being produced.')
         result = deny_access(_AuthenticationStatus.FORBIDDEN, method_arn, username, is_decision_path=is_decision_path)
 
     return result
