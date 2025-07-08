@@ -37,6 +37,16 @@ class SecurityMainStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
         )
 
+        # Create asymmetric KMS key for encryption/decryption
+        self.encryption_key = kms.Key(
+            self, 'SecurityEncryptionKey',
+            alias='alias/security_encryption',
+            multi_region=True,
+            removal_policy=RemovalPolicy.DESTROY,
+            key_spec=kms.KeySpec.RSA_2048,
+            key_usage=kms.KeyUsage.ENCRYPT_DECRYPT
+        )
+
         # Create DynamoDB table for user store as a global table
         self.user_table = dynamodb.Table(
             self, 'UserStore',
@@ -61,6 +71,20 @@ class SecurityMainStack(Stack):
             ),
             sort_key=dynamodb.Attribute(
                 name='api_id',
+                type=dynamodb.AttributeType.STRING
+            ),
+            removal_policy=RemovalPolicy.DESTROY,
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+            replication_regions=replication_regions
+        )
+
+        # Create DynamoDB table for registration IDs as a global table
+        self.registration_id_table = dynamodb.Table(
+            self, 'RegistrationId',
+            table_name='registration_id',
+            partition_key=dynamodb.Attribute(
+                name='registration_id',
                 type=dynamodb.AttributeType.STRING
             ),
             removal_policy=RemovalPolicy.DESTROY,

@@ -29,14 +29,30 @@ class SecurityApiGatewayRegionalStack(Stack):
     def __init__(
             self, scope: Construct, construct_id: str,
             user_table: dynamodb.Table, api_security_table: dynamodb.Table,
-            kms_key: kms.Key, region_name: str, **kwargs
+            registration_id_table: dynamodb.Table, kms_key: kms.Key, encryption_key: kms.Key, region_name: str, **kwargs
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Store the DynamoDB tables and KMS key
+        # Store the DynamoDB tables and KMS keys
         self.user_table = user_table
+        self.encryption_key = encryption_key
         self.api_security_table = api_security_table
+        self.registration_id_table = registration_id_table
         self.kms_key = kms_key
+
+        # Create custom domain name and Route53 record
+        # Look up the hosted zone
+        hosted_zone = route53.HostedZone.from_lookup(
+            self, 'HostedZone',
+            domain_name='security.i7es.click'
+        )
+
+        # Create ACM certificate for the domain
+        self.certificate = acm.Certificate(
+            self, 'SecurityCertificate',
+            domain_name='security.i7es.click',
+            validation=acm.CertificateValidation.from_dns(hosted_zone)
+        )
 
         # Create the Authorizer Lambda function
         # noinspection PyTypeChecker
@@ -73,10 +89,25 @@ class SecurityApiGatewayRegionalStack(Stack):
             runtime=aws_lambda.Runtime.PYTHON_3_12,
             architecture=aws_lambda.Architecture.ARM_64,
             handler='ogc_landing.registration.register_lambda.lambda_handler',
-            code=aws_lambda.Code.from_asset('../../src/registration_lambda'),
+            code=aws_lambda.Code.from_asset(
+                '../../src/registration_lambda',
+                bundling=BundlingOptions(
+                    image=aws_lambda.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash", "-c",
+                        "pip install --no-cache-dir -r requirements.txt -t /asset-output && cp -au . /asset-output"
+                    ],
+                    environment={
+                        "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+                        "PIP_NO_CACHE_DIR": "1"
+                    }
+                )
+            ),
             timeout=Duration.seconds(29),
             environment={
-                'key_alias': 'security_user_store_key'
+                'key_alias': 'security_user_store_key',
+                'registration_id_table': self.registration_id_table.table_name,
+                'encryption_key_arn': self.encryption_key.key_arn
             }
         )
 
@@ -109,9 +140,12 @@ class SecurityApiGatewayRegionalStack(Stack):
             retention=logs.RetentionDays.ONE_WEEK
         )
 
-        # Grant the Register Lambda permission to access DynamoDB
+        # Grant the Register Lambda permission to access DynamoDB, KMS, and ACM
         self.user_table.grant_read_write_data(register_lambda)
+        self.registration_id_table.grant_read_write_data(register_lambda)
         self.kms_key.grant_encrypt(register_lambda)
+        self.encryption_key.grant_decrypt(register_lambda)
+        self.encryption_key.grant(register_lambda, 'kms:GetPublicKey')
 
         # Grant the User Management Lambda permission to access DynamoDB and KMS
         self.user_table.grant_read_write_data(user_management_lambda)
@@ -167,20 +201,6 @@ class SecurityApiGatewayRegionalStack(Stack):
             self, 'MyApiSecurity',
             rest_api_name=f'API Security Service in {self.region}',  # Region-specific name
             description='Security services for APIs.',
-        )
-
-        # Create custom domain name and Route53 record
-        # Look up the hosted zone
-        hosted_zone = route53.HostedZone.from_lookup(
-            self, 'HostedZone',
-            domain_name='security.i7es.click'
-        )
-
-        # Create ACM certificate for the domain
-        self.certificate = acm.Certificate(
-            self, 'SecurityCertificate',
-            domain_name='security.i7es.click',
-            validation=acm.CertificateValidation.from_dns(hosted_zone)
         )
 
         # Create custom domain name for API Gateway
@@ -248,6 +268,8 @@ class SecurityApiGatewayRegionalStack(Stack):
         api_resource = self.api.root.add_resource('api')
         documentation_resource = self.api.root.add_resource('documentation')
         register_resource = self.api.root.add_resource('register')
+        registration_id_resource = self.api.root.add_resource('registration-id')
+        public_key_resource = self.api.root.add_resource('public-key')
         user_management_resource = self.api.root.add_resource('user-management')
         decision_resource = self.api.root.add_resource('decision')
 
@@ -330,6 +352,22 @@ class SecurityApiGatewayRegionalStack(Stack):
         # noinspection PyTypeChecker
         register_resource.add_method(
             'POST',
+            api_gateway.LambdaIntegration(register_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE,
+        )
+
+        # Add GET method for registration ID resource
+        # noinspection PyTypeChecker
+        registration_id_resource.add_method(
+            'GET',
+            api_gateway.LambdaIntegration(register_lambda),
+            authorization_type=api_gateway.AuthorizationType.NONE,
+        )
+
+        # Add GET method for public key resource
+        # noinspection PyTypeChecker
+        public_key_resource.add_method(
+            'GET',
             api_gateway.LambdaIntegration(register_lambda),
             authorization_type=api_gateway.AuthorizationType.NONE,
         )

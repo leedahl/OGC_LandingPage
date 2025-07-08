@@ -19,14 +19,17 @@ class KmsReplicaStack(Stack):
     """
     Stack for creating KMS replica keys in specified regions.
     """
-    def __init__(self, scope: Construct, construct_id: str, primary_key_arn: str, **kwargs) -> None:
+    def __init__(
+            self, scope: Construct, construct_id: str, primary_key_arn: str, primary_encryption_key_arn: str, **kwargs
+    ) -> None:
         """
         Initialize the KMS Replica Stack.
-        
+
         Args:
             scope: The scope in which to define this construct.
             construct_id: The ID of the construct.
             primary_key_arn: The ARN of the primary KMS key to replicate.
+            primary_encryption_key_arn: The ARN of the primary asymmetric encryption key to replicate.
             **kwargs: Additional keyword arguments.
         """
         super().__init__(scope, construct_id, **kwargs)
@@ -49,3 +52,16 @@ class KmsReplicaStack(Stack):
 
         self.kms_key = kms.Key.from_key_arn(self, 'ReplicaKey', self.replica_key.attr_arn)
         self.kms_key.add_alias('alias/security_user_store_key')
+
+        # Create a replica of the asymmetric encryption key if provided
+        self.encryption_replica_key = kms.CfnReplicaKey(
+            self, 'SecurityEncryptionReplicaKey',
+            primary_key_arn=primary_encryption_key_arn,
+            key_policy=key_policy,
+            description='Replica of the security encryption key',
+        )
+
+        self.encryption_key = kms.Key.from_key_arn(
+            self, 'EncryptionReplicaKey', self.encryption_replica_key.attr_arn
+        )
+        self.encryption_key.add_alias('alias/security_encryption')
